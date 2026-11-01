@@ -15,9 +15,9 @@ jobs:
           curl -sSL -A "$UA" -H "Accept-Language: en" -o pages/product.html -w "product %{http_code} %{size_download}\n" "https://d4donline.com/en/uae/abu-dhabi/products/desert-fresh-market--2990/100260831/top-product"
           J=jar.txt
           curl -sSL -A "$UA" -c $J -b $J -H "Accept-Language: en" -o pages/s1.html "https://d4donline.com/en/uae/abu-dhabi/products?search=onion"
-          TOK=$(grep -oP 'id="csrf" name="_csrf-frontend"\s*value="\K[^"]+' pages/s1.html | head -1)
+          TOK=$(grep -oP 'name="csrf-token" content="\K[^"]+' pages/s1.html | head -1)
           echo "token len ${#TOK}"
-          for path in "/products/search" "/en/products/search" "/en/uae/abu-dhabi/products/search" "/en/uae/abu-dhabi/products/search?search=onion"; do
+          for path in "/products/search"; do
             n=$(echo "$path" | tr -c 'a-z' '_')
             curl -sS -A "$UA" -c $J -b $J -H "X-Requested-With: XMLHttpRequest" -H "X-CSRF-Token: $TOK" -H "Origin: https://d4donline.com" -H "Referer: https://d4donline.com/en/uae/abu-dhabi/products?search=onion" \
               --data-urlencode "search=onion" --data "offset=20&limit=20&country=AEAD" --data-urlencode "_csrf-frontend=$TOK" \
