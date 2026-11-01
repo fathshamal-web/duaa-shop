@@ -33,6 +33,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        java.net.CookieHandler.setDefault(new java.net.CookieManager(null, java.net.CookiePolicy.ACCEPT_ALL));
         web = new WebView(this);
         setContentView(web);
         WebSettings s = web.getSettings();
@@ -91,9 +92,17 @@ public class MainActivity extends Activity {
     }
 
     class Bridge {
-        /** Fetch a page over HTTPS from the phone (no browser CORS limits). Result arrives via window.__nativeDone. */
+        /** GET a page over HTTPS from the phone (no browser CORS limits). Result arrives via window.__nativeDone. */
         @JavascriptInterface
-        public void fetch(final String id, final String url) {
+        public void fetch(final String id, final String url) { request(id, url, null, null, null); }
+
+        /** POST form data (used for D4D's "View More" search). Cookies are kept between calls. */
+        @JavascriptInterface
+        public void post(final String id, final String url, final String body, final String csrf, final String referer) {
+            request(id, url, body, csrf, referer);
+        }
+
+        private void request(final String id, final String url, final String body, final String csrf, final String referer) {
             pool.execute(() -> {
                 HttpURLConnection c = null;
                 try {
@@ -103,41 +112,22 @@ public class MainActivity extends Activity {
                     if (!(host.endsWith("d4donline.com") || host.endsWith("clicflyer.com"))) throw new Exception("host not allowed");
                     c = (HttpURLConnection) u.openConnection();
                     c.setConnectTimeout(15000);
-                    c.setReadTimeout(20000);
+                    c.setReadTimeout(25000);
                     c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14; SM-S911B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36");
                     c.setRequestProperty("Accept-Language", "en");
-                    int code = c.getResponseCode();
-                    BufferedReader r = new BufferedReader(new InputStreamReader(
-                            code >= 400 ? c.getErrorStream() : c.getInputStream(), StandardCharsets.UTF_8));
-                    StringBuilder sb = new StringBuilder();
-                    String line;
-                    while ((line = r.readLine()) != null) sb.append(line).append('\n');
-                    r.close();
-                    deliver(id, code < 400, sb.toString());
-                } catch (Exception e) {
-                    deliver(id, false, String.valueOf(e.getMessage()));
-                } finally {
-                    if (c != null) c.disconnect();
-                }
-            });
-        }
-
-        /** Diagnostic fetch: returns JSON {code, len, finalUrl, head} so the user can report what a site sends back. */
-        @JavascriptInterface
-        public void probe(final String id, final String url) {
-            pool.execute(() -> {
-                HttpURLConnection c = null;
-                JSONObject o = new JSONObject();
-                try {
-                    URL u = new URL(url);
-                    if (!"https".equals(u.getProtocol()) || !(u.getHost().endsWith("clicflyer.com") || u.getHost().endsWith("d4donline.com")))
-                        throw new Exception("host not allowed");
-                    c = (HttpURLConnection) u.openConnection();
-                    c.setConnectTimeout(15000);
-                    c.setReadTimeout(20000);
-                    c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14; SM-S911B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36");
-                    c.setRequestProperty("Accept", "text/html,application/json;q=0.9,*/*;q=0.8");
-                    c.setRequestProperty("Accept-Language", "en");
+                    if (body != null) {
+                        c.setRequestMethod("POST");
+                        c.setDoOutput(true);
+                        c.setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8");
+                        c.setRequestProperty("X-Requested-With", "XMLHttpRequest");
+                        c.setRequestProperty("Accept", "application/json, text/javascript, */*; q=0.01");
+                        c.setRequestProperty("Origin", "https://d4donline.com");
+                        if (csrf != null) c.setRequestProperty("X-CSRF-Token", csrf);
+                        if (referer != null) c.setRequestProperty("Referer", referer);
+                        byte[] out = body.getBytes(StandardCharsets.UTF_8);
+                        c.getOutputStream().write(out);
+                        c.getOutputStream().close();
+                    }
                     int code = c.getResponseCode();
                     java.io.InputStream in = code >= 400 ? c.getErrorStream() : c.getInputStream();
                     StringBuilder sb = new StringBuilder();
@@ -147,26 +137,12 @@ public class MainActivity extends Activity {
                         while ((line = r.readLine()) != null) sb.append(line).append('\n');
                         r.close();
                     }
-                    String body = sb.toString();
-                    o.put("code", code);
-                    o.put("len", body.length());
-                    o.put("finalUrl", c.getURL().toString());
-                    o.put("body", body.length() > 400000 ? body.substring(0, 400000) : body);
-                    deliver(id, true, o.toString());
+                    deliver(id, code < 400, code < 400 ? sb.toString() : ("HTTP " + code));
                 } catch (Exception e) {
                     deliver(id, false, String.valueOf(e.getMessage()));
                 } finally {
                     if (c != null) c.disconnect();
                 }
-            });
-        }
-
-        @JavascriptInterface
-        public void copy(final String text) {
-            runOnUiThread(() -> {
-                android.content.ClipboardManager cm = (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
-                if (cm != null) cm.setPrimaryClip(android.content.ClipData.newPlainText("Duaa Shop test", text));
-                android.widget.Toast.makeText(MainActivity.this, "Copied. Paste it to Claude.", android.widget.Toast.LENGTH_SHORT).show();
             });
         }
 

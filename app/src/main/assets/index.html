@@ -62,6 +62,11 @@ details.shopc summary::-webkit-details-marker{display:none}
 .plist{margin-top:10px;display:grid;grid-template-columns:1fr auto;gap:4px 12px;font-size:.92rem}
 .plist .win{color:var(--ok);font-weight:700}
 .note{font-size:.82rem;color:var(--muted)}
+.win-row{display:flex;flex-direction:column;gap:2px;padding-top:6px;border-top:1px solid var(--line)}
+.medal{font-size:.8rem;font-weight:700;margin-right:6px;color:var(--muted)}
+.price2{font-family:var(--display);font-weight:800;color:var(--tag);margin-left:8px;white-space:nowrap}
+.price2 s{font-family:var(--body);font-weight:400;font-size:.78rem;color:var(--muted);margin-left:4px}
+.best .k2{font-size:.9rem;font-weight:700;margin-top:6px;padding-top:6px;border-top:1px solid rgba(0,0,0,.15)}
 .empty{color:var(--muted);text-align:center;padding:18px;border:1px dashed var(--line);border-radius:10px}
 </style>
 </head>
@@ -95,12 +100,6 @@ details.shopc summary::-webkit-details-marker{display:none}
     <ul id="results"></ul>
     <h2 id="shopsHead" hidden>Shops with the most of your items</h2>
     <ul id="shops"></ul>
-    <section class="panel" id="cfPanel">
-      <span class="lbl">ClicFlyer test</span>
-      <span class="hint">Checks whether ClicFlyer can be read from your phone. Tap Test, then Copy result and paste it to Claude.</span>
-      <div class="locrow"><button id="cfTest">Test ClicFlyer</button><button id="cfCopy" hidden>Copy result</button></div>
-      <pre id="cfOut" style="white-space:pre-wrap;font-size:.8rem;margin:0;color:var(--muted)"></pre>
-    </section>
     <p class="note">Prices from D4D Online store brochures. D4D marks its prices as AI-read from flyers; the brochure price wins if it differs. Check pack sizes on the shelf.</p>
   </section>
 </div>
@@ -118,7 +117,8 @@ const REGIONS={
   "Shakhbout City":[24.36,54.65,["shakhbout","shakbout"]],
   "Al Reef":[24.45,54.68,["reef"]],
   "Al Raha / Yas":[24.45,54.61,["raha","yas"]],
-  "Madinat Zayed / Muroor":[24.46,54.38,["madinat zayed","muroor","al wahda","wahda"]],
+  "Muroor / Al Wahda":[24.46,54.38,["muroor","wahda","mushrif","nahyan","airport road","defence","madinat zayed"]],
+  "City Centre (Electra / Najda)":[24.49,54.36,["electra","najda","salam","khalifa street","markaziya","zahiyah","tca","tourist club","hamdan"]],
   "Al Mafraq":[24.28,54.58,["mafraq","hameem"]]}},
  "Al Ain":{slug:"al-ain",areas:{
   "Al Jimi":[24.25,55.73,["jimi"]],"Al Muwaiji":[24.20,55.71,["muwaiji"]],"Al Towayya":[24.25,55.79,["towayya","tawiya"]],
@@ -203,68 +203,69 @@ function get(url){return new Promise((res,rej)=>{
 async function limit(n,tasks){const out=[];let i=0;async function w(){while(i<tasks.length){const k=i++;try{out[k]=await tasks[k]()}catch(e){out[k]=null}}}
   await Promise.all(Array.from({length:n},w));return out}
 
-// ---------- D4D parsing ----------
-const NICE={"k-m-trading":"K M Trading","k-m-hypermarket":"K.M Hypermarket","mark-save":"Mark & Save","bigmart":"BIGmart","adcoop":"ADCOOP","royal-gulf-hypermarket-llc":"Royal Gulf Hypermarket","express-al-madeena-hypermarket-llc":"Express Al Madeena","riviera-supermarket-l-l-c":"Riviera Supermarket","carrefour-uae":"Carrefour","spar-hyper-market":"SPAR"};
-function storeName(slug){slug=slug.replace(/^-+|-+$/g,"").replace(/-+/g,"-");if(NICE[slug])return NICE[slug];
-  return slug.split("-").map(w=>w.length<=2?w.toUpperCase():w[0].toUpperCase()+w.slice(1)).join(" ")}
-function parseSearch(html){
-  const doc=new DOMParser().parseFromString(html,"text/html");const out=[],seen=new Set();
-  doc.querySelectorAll('a[href*="/products/"]').forEach(a=>{
-    const href=a.getAttribute("href")||"";const m=href.match(/\/products\/([^\/?#]+?)-(\d+)\/(\d+)(?:[\/?#]|$)/);if(!m)return;
-    const pid=m[3];if(seen.has(pid))return;
-    const alt=[...a.querySelectorAll("img")].map(i=>i.getAttribute("alt")||"").join(" ");
-    const txt=(a.textContent+" "+alt).replace(/\s+/g," ");
-    let nums=[...txt.matchAll(/(?:AED|Dhs?)\.?\s*([\d,]+(?:\.\d+)?)/gi)].map(x=>parseFloat(x[1].replace(/,/g,"")));
-    if(!nums.length)nums=[...txt.matchAll(/\b(\d{1,4}\.\d{2})\b/g)].map(x=>parseFloat(x[1]));
-    nums=nums.filter(n=>n>0&&n<5000);if(!nums.length)return;
-    const price=Math.min(...nums),wasN=Math.max(...nums);
-    const title=(a.getAttribute("title")||alt||"").replace(/\s+/g," ").trim();
-    const cardName=(title.match(/^(.*?)\s*available at/i)||[])[1]||"";
-    const pd=a.querySelector(".product-description");
-    let store=(a.getAttribute("data-pic-desc")||(pd&&pd.textContent)||"").replace(/\s+/g," ").trim();
-    if(!store){const am=title.match(/available at\s+(.+?)(?:\s+in UAE.*)?$/i);store=am?am[1].trim():storeName(m[1])}
-    seen.add(pid);out.push({pid,price,was:wasN>price?wasN:null,store:niceStore(store),cardName,url:new URL(href,"https://d4donline.com").href});
-  });
-  return out;
-}
-function niceStore(s){s=s.replace(/\s+/g," ").trim();
-  if(s===s.toUpperCase())s=s.toLowerCase().replace(/\b[a-z]/g,c=>c.toUpperCase()).replace(/\bLlc\b/,"LLC").replace(/\bL\.l\.c\b/i,"LLC");
-  return s.replace(/\s+LLC$/,"").replace(/^Carrefour UAE$/,"Carrefour")}
-function parseProduct(html){
+// ---------- D4D search (same request the site's "View More" button uses) ----------
+function niceStore(s){s=String(s||"").replace(/\s+/g," ").trim();
+  if(s===s.toUpperCase())s=s.toLowerCase().replace(/\b[a-z]/g,c=>c.toUpperCase());
+  return s.replace(/\s+(L\.?\s?L\.?\s?C\.?)$/i,"").replace(/^Carrefour UAE$/i,"Carrefour").trim()}
+function pyList(v){if(Array.isArray(v))return v.map(String);return [...String(v||"").matchAll(/'([^']*)'|"([^"]*)"/g)].map(m=>(m[1]||m[2]||"").trim()).filter(Boolean)}
+const sessions={};
+async function session(slug){
+  if(sessions[slug])return sessions[slug];
+  const ref="https://d4donline.com/en/uae/"+slug+"/products";
+  const html=await get(ref);
   const doc=new DOMParser().parseFromString(html,"text/html");
-  // D4D product pages: <h1 class="product-name"> is usually empty and <h1 class="outlet-name"> is the shop.
-  // The real product text (read from the flyer) is in <title>, e.g. "... 17.99 10.99 crystal sunflower oil 1.5 ltr\ndesert fresh market"
-  const pn=doc.querySelector("h1.product-name");
-  let raw=(pn&&pn.textContent.trim())||"";
-  const t=(doc.querySelector("title")&&doc.querySelector("title").textContent)||"";
-  const firstLine=t.split("\n")[0].replace(/\s+/g," ").trim();
-  if(raw.length<3){const mm=firstLine.match(/(?:\d+\.\d{2}\s+)+([^\d].*)$/);raw=mm?mm[1]:firstLine}
-  const name=raw.replace(/[\[\]ð]/g,"").replace(/\s+/g," ").replace(/^\.+\s*/,"").trim().slice(0,70);
-  const ab=doc.querySelector(".all-branch");
-  const branches=(ab?ab.textContent:"").replace(/\s+/g," ").trim();
-  const desc=doc.querySelector("p.description");
-  const body=(doc.body?doc.body.textContent:"").replace(/\s+/g," ");
-  const till=((desc&&desc.textContent)||body).match(/Till\s+(\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]+)/i);
-  return {name,till:till?till[1]:"",branches,text:(t+" "+name).toLowerCase()};
+  const meta=doc.querySelector('meta[name="csrf-token"]');const cs=doc.querySelector("#csrf");const cn=doc.querySelector("#country");
+  const token=(meta&&meta.getAttribute("content"))||(cs&&cs.getAttribute("value"))||"";
+  const pmeta=doc.querySelector('meta[name="csrf-param"]');
+  const s={ref,token,param:(pmeta&&pmeta.getAttribute("content"))||(cs&&cs.getAttribute("name"))||"_csrf-frontend",country:(cn&&cn.getAttribute("value"))||""};
+  if(!s.token)throw new Error("D4D didn't give a search token");
+  sessions[slug]=s;return s;
+}
+function postForm(url,body,csrf,ref){return new Promise((res,rej)=>{
+  const id="q"+(++seq);pending[id]={res,rej};setTimeout(()=>{if(pending[id]){delete pending[id];rej(new Error("timeout"))}},45000);
+  window.Native.post(id,url,body,csrf,ref)})}
+async function searchAll(q,slug){
+  const s=await session(slug);const all=[];const seen=new Set();
+  for(let offset=0;offset<200;offset+=20){
+    const body=new URLSearchParams({search:q,offset:String(offset),limit:"20",country:s.country,[s.param]:s.token}).toString();
+    const d=JSON.parse(await postForm("https://d4donline.com/products/search",body,s.token,s.ref+"?search="+encodeURIComponent(q)));
+    const items=Array.isArray(d.items)?d.items:[];
+    items.forEach(x=>{if(!seen.has(x.idoffer_special)){seen.add(x.idoffer_special);all.push(x)}});
+    if(items.length<20)break;
+  }
+  return all;
 }
 function nearKw(){const a=REGIONS[st.emirate].areas[st.area];return a?a[2]:[]}
-
+function cleanDesc(d,store){
+  let t=String(d||"").split("\n")[0];
+  t=t.replace(/[^\x20-\x7E]/g," ").replace(/\b\w*\d\w*\b/g," ").replace(/\b(aed|dhs?|only|days?|off|per|each|offer|price|b|d)\b/gi," ")
+     .replace(/[#+*\/|.,:;!()\[\]{}=_~`"'-]/g," ").replace(/\s+/g," ").trim();
+  if(store&&t.toLowerCase()===store.toLowerCase())t="";
+  return t.slice(0,45);
+}
+function endDate(v){const m=String(v||"").match(/^(\d{4})-(\d{2})-(\d{2})/);if(!m)return "";
+  return new Date(+m[1],+m[2]-1,+m[3]).toLocaleDateString("en-GB",{day:"numeric",month:"short"})}
 async function checkItem(t,slug){
-  const html=await get("https://d4donline.com/en/uae/"+slug+"/products?search="+encodeURIComponent(t.q));
-  const cands=parseSearch(html).sort((a,b)=>a.price-b.price);
-  const kws=t.kw.map(k=>k.toLowerCase()), near=nearKw();
-  const offers=[];
-  for(let i=0;i<cands.length&&i<10&&offers.length<5;i++){
-    const c=cands[i];
-    try{
-      const p=parseProduct(await get(c.url));
-      const hay=(c.cardName+" "+p.text).toLowerCase();
-      if(!kws.some(k=>hay.includes(k)))continue;
-      const br=p.branches.toLowerCase();
-      offers.push({...c,product:c.cardName&&c.cardName.length>p.name.length?c.cardName:p.name,ends:p.till,near:near.some(k=>br.includes(k))});
-    }catch(e){}
-  }
-  return {...t,offers,found:cands.length};
+  const raw=await searchAll(t.q,slug);
+  const kws=t.kw.map(k=>new RegExp("(^|[^a-z])"+k.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g,"\\$&"),"i"));
+  const near=nearKw(), now=Date.now();
+  const byStore={};
+  raw.forEach(x=>{
+    const price=parseFloat(x.price);if(!(price>0&&price<5000))return;
+    const vt=Date.parse(String(x.valid_to||"").replace(" ","T")+"+04:00");if(vt&&vt<now)return;
+    const desc=String(x.description||"");
+    if(!kws.some(r=>r.test(desc)))return;
+    const store=niceStore(x.text_footer_en);
+    const branches=pyList(x.company_branch);
+    const nb=branches.find(b=>near.some(k=>b.toLowerCase().includes(k)));
+    const was=parseFloat(x.was_price);
+    const o={store,price,was:was>price?was:null,product:cleanDesc(desc,store),ends:endDate(x.valid_to),
+      branches,nearBranch:nb||"",near:!!nb,url:x.url||""};
+    const cur=byStore[store];
+    if(!cur||(o.near&&!cur.near)||(o.near===cur.near&&o.price<cur.price))byStore[store]=o;
+  });
+  const offers=Object.values(byStore).sort((a,b)=>a.price-b.price);
+  return {...t,offers,found:raw.length};
 }
 
 // ---------- Run ----------
@@ -276,7 +277,7 @@ $("go").onclick=async()=>{
   const slug=REGIONS[st.emirate].slug;const ts=list.map(translate);
   $("go").disabled=true;$("progBox").hidden=false;let done=0;
   const tick=()=>{$("prog").style.width=Math.round(100*done/ts.length)+"%";$("status").textContent="Checking offers… "+done+" of "+ts.length+" items"};tick();
-  const res=await limit(4,ts.map(t=>async()=>{let r;try{r=await checkItem(t,slug)}catch(e){r={...t,offers:[],error:e.message}}done++;tick();return r}));
+  const res=await limit(3,ts.map(t=>async()=>{let r;try{r=await checkItem(t,slug)}catch(e){r={...t,offers:[],error:e.message}}done++;tick();return r}));
   st.last={at:new Date().toISOString(),emirate:st.emirate,area:st.area,items:res};save();
   $("go").disabled=false;$("progBox").hidden=true;render();
 };
@@ -300,11 +301,17 @@ function render(){
     if(b){winners[it.input]=b.store;const p=el("span","price",aed(b.price));if(b.was)p.appendChild(el("s",null,Number(b.was).toFixed(2)));h.appendChild(p)}
     li.appendChild(h);
     if(b){
-      const s=el("div");s.appendChild(el("span","shop",b.store));if(b.near)s.appendChild(el("span","near","Near you"));li.appendChild(s);
-      li.appendChild(el("div","where",[b.product,b.ends?"Ends "+b.ends:""].filter(Boolean).join(" · ")));
-      const nb=o.find(x=>x.near&&x.store!==b.store);
-      if(!b.near&&nb)li.appendChild(el("div","alt","Cheapest near you: "+nb.store+" "+aed(nb.price)));
-      const others=o.slice(1).filter(x=>x!==nb).slice(0,2);
+      const place=x=>x.nearBranch||(x.branches||[]).slice(0,2).join(", ")+((!x.nearBranch&&(x.branches||[]).length>2)?" +"+(x.branches.length-2)+" more":"");
+      const winRow=(medal,x,showPrice)=>{const r=el("div","win-row");const top=el("div");top.appendChild(el("span","medal",medal));top.appendChild(el("span","shop",x.store));
+        if(x.near)top.appendChild(el("span","near","Near you"));if(showPrice){const pr=el("span","price2",aed(x.price));if(x.was)pr.appendChild(el("s",null,Number(x.was).toFixed(2)));top.appendChild(pr)}r.appendChild(top);
+        const meta=[x.product,x.ends?"Ends "+x.ends:""].filter(Boolean).join(" · ");if(meta)r.appendChild(el("div","where",meta));
+        const pl=place(x);if(pl)r.appendChild(el("div","where","📍 "+pl));return r};
+      li.appendChild(winRow("🥇 1st",b,false));
+      const second=o[1];
+      if(second)li.appendChild(winRow("🥈 2nd",second,true));
+      const nb=o.find(x=>x.near&&x!==b&&x!==second);
+      if(!b.near&&!(second&&second.near)&&nb)li.appendChild(el("div","alt","Cheapest near you: "+nb.store+" "+aed(nb.price)+" ("+nb.nearBranch+")"));
+      const others=o.slice(2).filter(x=>x!==nb).slice(0,3);
       if(others.length)li.appendChild(el("div","alt","Also: "+others.map(x=>x.store+" "+aed(x.price)).join(", ")));
       li.appendChild(openLink(b.url));
     }else li.appendChild(el("div","none",it.error?"Couldn't check this item. Try again.":"No offer found this week."));
@@ -312,20 +319,22 @@ function render(){
   });
   // shop ranking
   const S={};
-  L.items.forEach(it=>(it.offers||[]).forEach(o=>{const s=S[o.store]||(S[o.store]={store:o.store,items:{},near:false});
-    if(!s.items[it.input]||o.price<s.items[it.input])s.items[it.input]=o.price;if(o.near)s.near=true}));
+  L.items.forEach(it=>(it.offers||[]).forEach(o=>{const s=S[o.store]||(S[o.store]={store:o.store,items:{},near:false,nb:""});
+    if(!s.items[it.input]||o.price<s.items[it.input])s.items[it.input]=o.price;if(o.near){s.near=true;s.nb=s.nb||o.nearBranch}}));
   const total=L.items.length;
   const shops=Object.values(S).map(s=>({...s,count:Object.keys(s.items).length,sum:Object.values(s.items).reduce((a,b)=>a+b,0)}))
-    .sort((a,b)=>b.count-a.count||(b.near-a.near)||a.sum-b.sum).slice(0,10);
+    .sort((a,b)=>b.count-a.count||(b.near-a.near)||a.sum-b.sum).slice(0,15);
   if(shops.length){
-    const top=shops[0];const c=el("div","best");c.appendChild(el("span","k","Best one-stop shop"));c.appendChild(el("span","s",top.store));
-    c.appendChild(el("span",null,"Has "+top.count+" of your "+total+" items on offer"+(top.near?", with a branch near you":"")));best.appendChild(c);
+    const top=shops[0];const c=el("div","best");c.appendChild(el("span","k","🥇 Best one-stop shop"));c.appendChild(el("span","s",top.store));
+    c.appendChild(el("span",null,"Has "+top.count+" of your "+total+" items on offer"+(top.near?" · 📍 "+top.nb:"")));
+    const sec=shops[1];if(sec){c.appendChild(el("span","k2","🥈 2nd: "+sec.store+" · "+sec.count+" of "+total+" items"+(sec.near?" · 📍 "+sec.nb:"")))}
+    best.appendChild(c);
   }
   shops.forEach((s,i)=>{
     const li=el("li");const d=el("details","shopc");const sm=el("summary");
     sm.appendChild(el("span","rank",String(i+1)));
     const info=el("span","sinfo");const nm=el("span","shop",s.store);if(s.near)nm.appendChild(el("span","near","Near you"));info.appendChild(nm);
-    info.appendChild(el("span","where","Total "+aed(s.sum)+" for these items"));
+    info.appendChild(el("span","where",(s.nb?"📍 "+s.nb+" · ":"")+"Total "+aed(s.sum)+" for these items"));
     const m=el("span","meter");const bar=el("i");bar.style.width=Math.round(100*s.count/total)+"%";m.appendChild(bar);info.appendChild(m);sm.appendChild(info);
     const c=el("span","cnt",String(s.count));c.appendChild(el("small",null," of "+total));sm.appendChild(c);d.appendChild(sm);
     const pl=el("div","plist");Object.entries(s.items).forEach(([k,v])=>{const w=winners[k]===s.store;
@@ -333,37 +342,6 @@ function render(){
     d.appendChild(pl);li.appendChild(d);sh.appendChild(li);
   });
 }
-// ---------- ClicFlyer diagnostic ----------
-function probe(url){return new Promise((res,rej)=>{
-  if(!window.Native||!window.Native.probe){rej(new Error("not in app"));return}
-  const id="p"+(++seq);pending[id]={res:b=>{try{res(JSON.parse(b))}catch(e){rej(e)}},rej};
-  setTimeout(()=>{if(pending[id]){delete pending[id];rej(new Error("timeout"))}},40000);
-  window.Native.probe(id,url)})}
-let cfReport="";
-$("cfTest").onclick=async()=>{
-  const city=st.emirate==="Sharjah / Ajman"?"sharjah":REGIONS[st.emirate].slug;
-  const base="https://clicflyer.com/shoppers/en/united-arab-emirates/"+city;
-  const urls=[base+"/home",base+"/offers",base+"/search?q=onion",base+"/retailers/grand-1214"];
-  $("cfTest").disabled=true;$("cfOut").textContent="Testing…";
-  const lines=["Duaa Shop ClicFlyer test v1.2 · "+new Date().toISOString()];
-  for(const u of urls){
-    try{
-      const r=await probe(u);const b=r.body||"";
-      const doc=new DOMParser().parseFromString(b,"text/html");
-      const title=(doc.title||"").replace(/\s+/g," ").trim().slice(0,90);
-      const aed=(b.match(/AED|د\.إ/g)||[]).length, links=(b.match(/href=/g)||[]).length;
-      const nextData=/__NEXT_DATA__|__NUXT__|window\.__INITIAL/.test(b);
-      const apis=[...new Set((b.match(/https?:\/\/[a-z0-9.-]*(?:api|cdn|services?)[a-z0-9.-]*\.[a-z]{2,}[^"'\s<)]{0,60}/gi)||[]))].slice(0,6);
-      const text=(doc.body?doc.body.textContent:"").replace(/\s+/g," ").trim().slice(0,220);
-      lines.push("\n"+u.replace(base,"")+" → "+r.code+" · "+r.len+" chars · title: "+title+" · AED×"+aed+" · links×"+links+(nextData?" · app-data":""));
-      if(apis.length)lines.push("  urls: "+apis.join(" | "));
-      lines.push("  text: "+text);
-    }catch(e){lines.push("\n"+u.replace(base,"")+" → error: "+e.message)}
-  }
-  cfReport=lines.join("\n");$("cfOut").textContent=cfReport;$("cfCopy").hidden=false;$("cfTest").disabled=false;
-};
-$("cfCopy").onclick=()=>{if(window.Native&&window.Native.copy)window.Native.copy(cfReport)};
-
 renderLoc();render();
 </script>
 </body>
