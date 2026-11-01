@@ -122,6 +122,54 @@ public class MainActivity extends Activity {
             });
         }
 
+        /** Diagnostic fetch: returns JSON {code, len, finalUrl, head} so the user can report what a site sends back. */
+        @JavascriptInterface
+        public void probe(final String id, final String url) {
+            pool.execute(() -> {
+                HttpURLConnection c = null;
+                JSONObject o = new JSONObject();
+                try {
+                    URL u = new URL(url);
+                    if (!"https".equals(u.getProtocol()) || !(u.getHost().endsWith("clicflyer.com") || u.getHost().endsWith("d4donline.com")))
+                        throw new Exception("host not allowed");
+                    c = (HttpURLConnection) u.openConnection();
+                    c.setConnectTimeout(15000);
+                    c.setReadTimeout(20000);
+                    c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14; SM-S911B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36");
+                    c.setRequestProperty("Accept", "text/html,application/json;q=0.9,*/*;q=0.8");
+                    c.setRequestProperty("Accept-Language", "en");
+                    int code = c.getResponseCode();
+                    java.io.InputStream in = code >= 400 ? c.getErrorStream() : c.getInputStream();
+                    StringBuilder sb = new StringBuilder();
+                    if (in != null) {
+                        BufferedReader r = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));
+                        String line;
+                        while ((line = r.readLine()) != null) sb.append(line).append('\n');
+                        r.close();
+                    }
+                    String body = sb.toString();
+                    o.put("code", code);
+                    o.put("len", body.length());
+                    o.put("finalUrl", c.getURL().toString());
+                    o.put("body", body.length() > 400000 ? body.substring(0, 400000) : body);
+                    deliver(id, true, o.toString());
+                } catch (Exception e) {
+                    deliver(id, false, String.valueOf(e.getMessage()));
+                } finally {
+                    if (c != null) c.disconnect();
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void copy(final String text) {
+            runOnUiThread(() -> {
+                android.content.ClipboardManager cm = (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+                if (cm != null) cm.setPrimaryClip(android.content.ClipData.newPlainText("Duaa Shop test", text));
+                android.widget.Toast.makeText(MainActivity.this, "Copied. Paste it to Claude.", android.widget.Toast.LENGTH_SHORT).show();
+            });
+        }
+
         @JavascriptInterface
         public void openUrl(String url) {
             if (url != null && url.startsWith("https://")) {

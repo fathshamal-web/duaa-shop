@@ -95,6 +95,12 @@ details.shopc summary::-webkit-details-marker{display:none}
     <ul id="results"></ul>
     <h2 id="shopsHead" hidden>Shops with the most of your items</h2>
     <ul id="shops"></ul>
+    <section class="panel" id="cfPanel">
+      <span class="lbl">ClicFlyer test</span>
+      <span class="hint">Checks whether ClicFlyer can be read from your phone. Tap Test, then Copy result and paste it to Claude.</span>
+      <div class="locrow"><button id="cfTest">Test ClicFlyer</button><button id="cfCopy" hidden>Copy result</button></div>
+      <pre id="cfOut" style="white-space:pre-wrap;font-size:.8rem;margin:0;color:var(--muted)"></pre>
+    </section>
     <p class="note">Prices from D4D Online store brochures. D4D marks its prices as AI-read from flyers; the brochure price wins if it differs. Check pack sizes on the shelf.</p>
   </section>
 </div>
@@ -327,6 +333,37 @@ function render(){
     d.appendChild(pl);li.appendChild(d);sh.appendChild(li);
   });
 }
+// ---------- ClicFlyer diagnostic ----------
+function probe(url){return new Promise((res,rej)=>{
+  if(!window.Native||!window.Native.probe){rej(new Error("not in app"));return}
+  const id="p"+(++seq);pending[id]={res:b=>{try{res(JSON.parse(b))}catch(e){rej(e)}},rej};
+  setTimeout(()=>{if(pending[id]){delete pending[id];rej(new Error("timeout"))}},40000);
+  window.Native.probe(id,url)})}
+let cfReport="";
+$("cfTest").onclick=async()=>{
+  const city=st.emirate==="Sharjah / Ajman"?"sharjah":REGIONS[st.emirate].slug;
+  const base="https://clicflyer.com/shoppers/en/united-arab-emirates/"+city;
+  const urls=[base+"/home",base+"/offers",base+"/search?q=onion",base+"/retailers/grand-1214"];
+  $("cfTest").disabled=true;$("cfOut").textContent="Testing…";
+  const lines=["Duaa Shop ClicFlyer test v1.2 · "+new Date().toISOString()];
+  for(const u of urls){
+    try{
+      const r=await probe(u);const b=r.body||"";
+      const doc=new DOMParser().parseFromString(b,"text/html");
+      const title=(doc.title||"").replace(/\s+/g," ").trim().slice(0,90);
+      const aed=(b.match(/AED|د\.إ/g)||[]).length, links=(b.match(/href=/g)||[]).length;
+      const nextData=/__NEXT_DATA__|__NUXT__|window\.__INITIAL/.test(b);
+      const apis=[...new Set((b.match(/https?:\/\/[a-z0-9.-]*(?:api|cdn|services?)[a-z0-9.-]*\.[a-z]{2,}[^"'\s<)]{0,60}/gi)||[]))].slice(0,6);
+      const text=(doc.body?doc.body.textContent:"").replace(/\s+/g," ").trim().slice(0,220);
+      lines.push("\n"+u.replace(base,"")+" → "+r.code+" · "+r.len+" chars · title: "+title+" · AED×"+aed+" · links×"+links+(nextData?" · app-data":""));
+      if(apis.length)lines.push("  urls: "+apis.join(" | "));
+      lines.push("  text: "+text);
+    }catch(e){lines.push("\n"+u.replace(base,"")+" → error: "+e.message)}
+  }
+  cfReport=lines.join("\n");$("cfOut").textContent=cfReport;$("cfCopy").hidden=false;$("cfTest").disabled=false;
+};
+$("cfCopy").onclick=()=>{if(window.Native&&window.Native.copy)window.Native.copy(cfReport)};
+
 renderLoc();render();
 </script>
 </body>
