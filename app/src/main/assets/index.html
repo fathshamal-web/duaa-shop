@@ -220,26 +220,45 @@ function niceStore(s){s=String(s||"").replace(/\s+/g," ").trim();
   return s.replace(/\s+(L\.?\s?L\.?\s?C\.?)$/i,"").replace(/^Carrefour UAE$/i,"Carrefour").trim()}
 function pyList(v){if(Array.isArray(v))return v.map(String);return [...String(v||"").matchAll(/'([^']*)'|"([^"]*)"/g)].map(m=>(m[1]||m[2]||"").trim()).filter(Boolean)}
 const sessions={};
-async function session(slug){
-  if(sessions[slug])return sessions[slug];
-  const ref="https://d4donline.com/en/uae/"+slug+"/products";
-  const html=await get(ref);
-  const doc=new DOMParser().parseFromString(html,"text/html");
-  const meta=doc.querySelector('meta[name="csrf-token"]');const cs=doc.querySelector("#csrf");const cn=doc.querySelector("#country");
-  const token=(meta&&meta.getAttribute("content"))||(cs&&cs.getAttribute("value"))||"";
-  const pmeta=doc.querySelector('meta[name="csrf-param"]');
-  const s={ref,token,param:(pmeta&&pmeta.getAttribute("content"))||(cs&&cs.getAttribute("name"))||"_csrf-frontend",country:(cn&&cn.getAttribute("value"))||""};
-  if(!s.token)throw new Error("D4D didn't give a search token");
-  sessions[slug]=s;return s;
+// One shared D4D session per region: concurrent checks must reuse the same cookie + token,
+// otherwise each new page load replaces the cookie and the other tokens stop working.
+const sessTok={};
+function session(slug,fresh,staleToken){
+  if(fresh&&(staleToken===undefined||sessTok[slug]===staleToken)){delete sessions[slug];delete sessTok[slug]}
+  if(!sessions[slug])sessions[slug]=(async()=>{
+    const ref="https://d4donline.com/en/uae/"+slug+"/products";
+    const html=await get(ref);
+    const doc=new DOMParser().parseFromString(html,"text/html");
+    const meta=doc.querySelector('meta[name="csrf-token"]');const cs=doc.querySelector("#csrf");const cn=doc.querySelector("#country");
+    const pmeta=doc.querySelector('meta[name="csrf-param"]');
+    const s={ref,token:(meta&&meta.getAttribute("content"))||(cs&&cs.getAttribute("value"))||"",
+      param:(pmeta&&pmeta.getAttribute("content"))||(cs&&cs.getAttribute("name"))||"_csrf-frontend",country:(cn&&cn.getAttribute("value"))||""};
+    if(!s.token)throw new Error("D4D didn't give a search token");
+    sessTok[slug]=s.token;return s;
+  })().catch(e=>{delete sessions[slug];throw e});
+  return sessions[slug];
 }
 function postForm(url,body,csrf,ref){return new Promise((res,rej)=>{
   const id="q"+(++seq);pending[id]={res,rej};setTimeout(()=>{if(pending[id]){delete pending[id];rej(new Error("timeout"))}},45000);
   window.Native.post(id,url,body,csrf,ref)})}
-async function searchAll(q,slug){
-  const s=await session(slug);const all=[];const seen=new Set();
-  for(let offset=0;offset<200;offset+=20){
+async function searchPage(q,slug,offset){
+  let lastTok;
+  for(let attempt=0;attempt<3;attempt++){
+    const s=await session(slug,attempt>0,lastTok);lastTok=s.token;
     const body=new URLSearchParams({search:q,offset:String(offset),limit:"20",country:s.country,[s.param]:s.token}).toString();
-    const d=JSON.parse(await postForm("https://d4donline.com/products/search",body,s.token,s.ref+"?search="+encodeURIComponent(q)));
+    try{
+      const txt=await postForm("https://d4donline.com/products/search",body,s.token,s.ref+"?search="+encodeURIComponent(q));
+      return JSON.parse(txt);
+    }catch(e){
+      if(attempt===2)throw e;
+      await new Promise(r=>setTimeout(r,800+Math.random()*1200));
+    }
+  }
+}
+async function searchAll(q,slug){
+  const all=[];const seen=new Set();
+  for(let offset=0;offset<200;offset+=20){
+    const d=await searchPage(q,slug,offset);
     const items=Array.isArray(d.items)?d.items:[];
     items.forEach(x=>{if(!seen.has(x.idoffer_special)){seen.add(x.idoffer_special);all.push(x)}});
     if(items.length<20)break;
@@ -288,7 +307,9 @@ $("go").onclick=async()=>{
   const slug=REGIONS[st.emirate].slug;const ts=list.map(translate);
   $("go").disabled=true;$("progBox").hidden=false;let done=0;
   const tick=()=>{$("prog").style.width=Math.round(100*done/ts.length)+"%";$("status").textContent="Checking offers… "+done+" of "+ts.length+" items"};tick();
+  try{await session(slug,true)}catch(e){}
   const res=await limit(3,ts.map(t=>async()=>{let r;try{r=await checkItem(t,slug)}catch(e){r={...t,offers:[],error:e.message}}done++;tick();return r}));
+  for(let i=0;i<res.length;i++)if(res[i]&&res[i].error){$("status").textContent="Re-checking "+res[i].input+"…";try{res[i]=await checkItem(ts[i],slug)}catch(e){}}
   st.last={at:new Date().toISOString(),emirate:st.emirate,area:st.area,items:res};save();
   $("go").disabled=false;$("progBox").hidden=true;render();
 };
