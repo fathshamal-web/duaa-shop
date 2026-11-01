@@ -421,8 +421,17 @@ function renderHistory(){
 }
 $("histClear").onclick=()=>{st.history=[];save();renderHistory()};
 function mapsUrl(store,branch){
-  const L=st.last||{};const parts=[store,branch||L.area||"",L.emirate||st.emirate,"UAE"].filter(Boolean);
-  return "https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(parts.join(" "));
+  const L=st.last||{};
+  const clean=t=>String(t||"").replace(/[–—-]+/g," ").replace(/\s+/g," ").trim();
+  const sw=clean(store).toLowerCase().split(" ")[0];
+  const br=clean(branch);
+  // Branch names often already include the shop name ("BIGmart Hypermarket - Airport Road"): don't repeat it
+  const name=br?(br.toLowerCase().includes(sw)?br:clean(store)+" "+br):clean(store);
+  const dest=name+", "+(L.emirate||st.emirate)+", UAE";
+  // Directions URL: Maps resolves the destination to ONE place (the best match closest to the origin) and shows the route
+  let u="https://www.google.com/maps/dir/?api=1&travelmode=driving&destination="+encodeURIComponent(dest);
+  if(st.gps&&Date.now()-st.gps.at<6*3600*1000)u+="&origin="+st.gps.lat.toFixed(5)+","+st.gps.lon.toFixed(5);
+  return u;
 }
 function dirBtn(store,branch,label){const b=el("button","dir",label||"📍 Directions");
   b.onclick=e=>{e.preventDefault();e.stopPropagation();window.Native&&window.Native.openUrl(mapsUrl(store,branch))};return b}
