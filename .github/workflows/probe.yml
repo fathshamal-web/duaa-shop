@@ -13,6 +13,8 @@ jobs:
           curl -sSL -A "$UA" -H "Accept-Language: en" -o pages/search_onion.html -w "search %{http_code} %{size_download}\n" "https://d4donline.com/en/uae/abu-dhabi/products?search=onion"
           curl -sSL -A "$UA" -H "Accept-Language: en" -o pages/search_egg.html -w "search %{http_code} %{size_download}\n" "https://d4donline.com/en/uae/abu-dhabi/products?search=egg"
           curl -sSL -A "$UA" -H "Accept-Language: en" -o pages/product.html -w "product %{http_code} %{size_download}\n" "https://d4donline.com/en/uae/abu-dhabi/products/desert-fresh-market--2990/100260831/top-product"
+          curl -sSL -A "$UA" -o pages/product.min.js "https://d4donline.com/js/dist/product.min.js?v=44.37"
+          curl -sSL -A "$UA" -H "Accept-Language: en" -o pages/offers.html "https://d4donline.com/en/uae/abu-dhabi/offers"
           curl -sSL -A "$UA" -o pages/clicflyer.html -w "clicflyer %{http_code} %{size_download}\n" "https://clicflyer.com/shoppers/en/united-arab-emirates/abu-dhabi/home" || true
       - name: Save pages to probe branch
         run: |
