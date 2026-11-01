@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Duaa Shop</title>
+<style>
+:root{
+  --bg:#f6f7f4; --card:#ffffff; --fg:#1d2320; --muted:#5d6862; --line:#dfe3de;
+  --tag:#d7261e; --tag-fg:#ffffff; --hi:#ffd43b; --hi-fg:#1d2320; --ok:#1f7a4c; --warn:#a15c00;
+  --display:"Roboto Condensed","Arial Narrow",sans-serif; --body:Roboto,system-ui,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#141816; --card:#1c211e; --fg:#e9eee9; --muted:#9aa59f; --line:#2c332f;
+  --tag:#ff5a4f; --tag-fg:#1a0d0c; --ok:#5fd39a; --warn:#f0b35a; color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--body);font-size:15px;line-height:1.45}
+.top{background:var(--tag);color:var(--tag-fg);padding:14px 16px}
+.top b{font-family:var(--display);font-weight:800;font-size:1.5rem;letter-spacing:.02em}
+.top span{display:block;font-size:.85rem;opacity:.9}
+.wrap{max-width:560px;margin:0 auto;padding:16px;display:flex;flex-direction:column;gap:16px}
+h2{font-family:var(--display);font-weight:700;font-size:1.3rem;margin:0}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:10px}
+.lbl{font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font:inherit;font-size:.9rem;border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:999px;padding:7px 12px}
+.chip[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+textarea{font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;width:100%;min-height:90px}
+.hint{font-size:.85rem;color:var(--muted)}
+button{font:inherit;font-weight:700;border-radius:8px;padding:11px 14px;border:1px solid var(--line);background:var(--card);color:var(--fg)}
+button.go{background:var(--tag);color:var(--tag-fg);border-color:var(--tag);font-family:var(--display);font-size:1.2rem;text-transform:uppercase;letter-spacing:.03em}
+button:disabled{opacity:.55}
+.locrow{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.locrow .hint{flex:1;min-width:0}
+.prog{height:6px;background:var(--line);border-radius:3px;overflow:hidden}
+.prog i{display:block;height:100%;width:0;background:var(--tag);transition:width .3s}
+.status{font-size:.9rem;color:var(--muted)}
+.best{background:var(--hi);color:var(--hi-fg);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:4px}
+.best .k{font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em}
+.best .s{font-family:var(--display);font-weight:800;font-size:1.6rem;line-height:1.05}
+ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+li.item{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:5px}
+.ihead{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.iname{font-weight:700;font-size:1.05rem;min-width:0;overflow-wrap:anywhere}
+.iname small{font-weight:400;color:var(--muted)}
+.price{font-family:var(--display);font-weight:800;font-size:1.3rem;color:var(--tag);white-space:nowrap}
+.price s{font-family:var(--body);font-weight:400;font-size:.8rem;color:var(--muted);margin-left:4px}
+.shop{font-weight:700}
+.near{display:inline-block;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;background:var(--ok);color:var(--card);border-radius:4px;padding:1px 6px;margin-left:6px;vertical-align:middle}
+.where,.alt{color:var(--muted);font-size:.86rem}
+.none{color:var(--muted);font-style:italic}
+a.open{color:var(--tag);font-size:.86rem;font-weight:700;text-decoration:none}
+details.shopc{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px}
+details.shopc summary{list-style:none;display:flex;gap:12px;align-items:center}
+details.shopc summary::-webkit-details-marker{display:none}
+.rank{font-family:var(--display);font-weight:800;font-size:1.5rem;color:var(--muted);width:1.4em;text-align:center}
+.sinfo{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.meter{height:6px;background:var(--line);border-radius:3px;overflow:hidden}
+.meter i{display:block;height:100%;background:var(--ok)}
+.cnt{font-family:var(--display);font-weight:800;font-size:1.25rem;white-space:nowrap}
+.cnt small{font-family:var(--body);font-weight:400;font-size:.8rem;color:var(--muted)}
+.plist{margin-top:10px;display:grid;grid-template-columns:1fr auto;gap:4px 12px;font-size:.92rem}
+.plist .win{color:var(--ok);font-weight:700}
+.note{font-size:.82rem;color:var(--muted)}
+.empty{color:var(--muted);text-align:center;padding:18px;border:1px dashed var(--line);border-radius:10px}
+</style>
+</head>
+<body>
+<div class="top"><b>Duaa Shop</b><span>Cheapest grocery offers near you</span></div>
+<div class="wrap">
+
+  <section class="panel">
+    <div class="locrow">
+      <button id="gps">📍 Use my location</button>
+      <span class="hint" id="locText">Or pick your emirate and area below.</span>
+    </div>
+    <span class="lbl">Emirate</span>
+    <div class="chips" id="emirates"></div>
+    <span class="lbl">Area</span>
+    <div class="chips" id="areas"></div>
+  </section>
+
+  <section class="panel">
+    <label class="lbl" for="items">My items</label>
+    <textarea id="items" placeholder="pril, soap, savaala, takkali, egg"></textarea>
+    <span class="hint">Separate with commas or new lines. English or Malayalam (savaala, takkali, veppila…).</span>
+    <button class="go" id="go">Find offers</button>
+    <div class="prog" id="progBox" hidden><i id="prog"></i></div>
+    <div class="status" id="status"></div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:10px">
+    <div id="best"></div>
+    <h2 id="itemsHead" hidden>Cheapest shop for each item</h2>
+    <ul id="results"></ul>
+    <h2 id="shopsHead" hidden>Shops with the most of your items</h2>
+    <ul id="shops"></ul>
+    <p class="note">Prices from D4D Online store brochures. D4D marks its prices as AI-read from flyers; the brochure price wins if it differs. Check pack sizes on the shelf.</p>
+  </section>
+</div>
+
+<script>
+// ---------- Regions, areas, GPS points, branch keywords ----------
+const REGIONS={
+ "Abu Dhabi":{slug:"abu-dhabi",areas:{
+  "Mussafah":[24.35,54.50,["mussafah","musaffah","musafah","icad","m-26","m26","m 26","m37","m-37","shabiya"]],
+  "Khalifa City":[24.42,54.58,["khalifa city","khalifa"]],
+  "Shabiya / MBZ City":[24.33,54.55,["shabiya","shabia","mbz","mohammed bin zayed","me-1","me 1"]],
+  "Hamdan / Tourist Club":[24.49,54.37,["hamdan","tourist club","tca","zahiyah","zahiya","electra"]],
+  "Corniche / Khalidiya":[24.47,54.34,["corniche","khalidiya","khalidiyah","khalidia"]],
+  "Baniyas":[24.30,54.64,["baniyas","bani yas"]],
+  "Shakhbout City":[24.36,54.65,["shakhbout","shakbout"]],
+  "Al Reef":[24.45,54.68,["reef"]],
+  "Al Raha / Yas":[24.45,54.61,["raha","yas"]],
+  "Madinat Zayed / Muroor":[24.46,54.38,["madinat zayed","muroor","al wahda","wahda"]],
+  "Al Mafraq":[24.28,54.58,["mafraq","hameem"]]}},
+ "Al Ain":{slug:"al-ain",areas:{
+  "Al Jimi":[24.25,55.73,["jimi"]],"Al Muwaiji":[24.20,55.71,["muwaiji"]],"Al Towayya":[24.25,55.79,["towayya","tawiya"]],
+  "Hili":[24.28,55.78,["hili"]],"Al Khabisi":[24.23,55.75,["khabisi"]],"Sanaiya":[24.20,55.77,["sanaiya","sanaya","industrial"]]}},
+ "Dubai":{slug:"dubai",areas:{
+  "Deira":[25.27,55.32,["deira","naif","muraqqabat","rigga"]],"Bur Dubai":[25.25,55.29,["bur dubai","mankhool","meena bazaar"]],
+  "Karama":[25.24,55.30,["karama"]],"Al Qusais":[25.28,55.38,["qusais"]],"Al Nahda (Dubai)":[25.29,55.37,["nahda"]],
+  "International City":[25.16,55.41,["international city"]],"Mirdif":[25.22,55.42,["mirdif"]],
+  "Silicon Oasis":[25.12,55.38,["silicon oasis","dso"]],"Al Barsha":[25.11,55.20,["barsha"]],
+  "Marina / JLT":[25.07,55.14,["marina","jlt","jumeirah lake"]],"Jebel Ali":[25.00,55.10,["jebel ali"]]}},
+ "Sharjah / Ajman":{slug:"sharjah-ajman",areas:{
+  "Al Nahda (Sharjah)":[25.30,55.37,["nahda"]],"Rolla":[25.36,55.39,["rolla"]],"Al Majaz":[25.33,55.39,["majaz"]],
+  "Muwaileh":[25.30,55.46,["muwaileh","muweileh"]],"Industrial Area":[25.31,55.41,["industrial"]],
+  "Ajman Nuaimiya":[25.39,55.45,["nuaimiya","nuaimia","ajman"]],"Ajman Al Jurf":[25.41,55.48,["jurf"]]}},
+ "Ras al Khaimah":{slug:"ras-al-khaimah",areas:{
+  "Al Nakheel":[25.79,55.95,["nakheel"]],"Al Dhait":[25.74,55.98,["dhait"]],"Julphar":[25.80,55.97,["julphar"]],"Al Hamra":[25.69,55.79,["hamra"]]}},
+ "Fujairah":{slug:"fujairah",areas:{
+  "Fujairah City":[25.12,56.33,["fujairah"]],"Dibba":[25.62,56.27,["dibba"]],"Khor Fakkan":[25.34,56.35,["khor fakkan","khorfakkan"]]}},
+ "Umm al Quwain":{slug:"umm-al-quwain",areas:{"UAQ City":[25.56,55.55,["umm al quwain","uaq"]],"Al Salamah":[25.50,55.60,["salamah"]]}}
+};
+
+// ---------- Malayalam → English (search term, words a product name should contain) ----------
+const ML={
+ "savaala":["onion",["onion"]],"savala":["onion",["onion"]],"ulli":["onion",["onion"]],"cheriya ulli":["small onion",["onion","shallot"]],"chuvanna ulli":["small onion",["onion","shallot"]],
+ "takkali":["tomato",["tomato"]],"thakkali":["tomato",["tomato"]],"veppila":["curry leaves",["curry leaf","curry leaves"]],"kariveppila":["curry leaves",["curry leaf","curry leaves"]],
+ "mallichep":["coriander",["coriander"]],"malliyila":["coriander",["coriander"]],"malli":["coriander",["coriander"]],"pudina":["mint",["mint"]],
+ "neychor ari":["jeerakasala",["jeerakasala","kaima","jeera"]],"jeerakasala":["jeerakasala",["jeerakasala"]],"ari":["rice",["rice"]],"matta ari":["matta rice",["matta"]],"pachari":["raw rice",["rice"]],
+ "dosa mavu":["dosa batter",["dosa","batter","idly"]],"idli mavu":["idly batter",["idly","idli","batter"]],
+ "pachamulaku":["green chilli",["chilli","chili"]],"mulaku":["chilli",["chilli","chili"]],"inji":["ginger",["ginger"]],"veluthulli":["garlic",["garlic"]],
+ "urulakizhangu":["potato",["potato"]],"uruli kizhangu":["potato",["potato"]],"kizhangu":["potato",["potato"]],"pazham":["banana",["banana"]],"nenthrapazham":["banana",["banana","nendran"]],
+ "paal":["milk",["milk"]],"mutta":["egg",["egg"]],"pancharu":["sugar",["sugar"]],"panchasara":["sugar",["sugar"]],"uppu":["salt",["salt"]],
+ "velichenna":["coconut oil",["coconut oil"]],"enna":["oil",["oil"]],"thenga":["coconut",["coconut"]],"parippu":["dal",["dal","toor","moong","lentil"]],
+ "kadala":["chickpeas",["chick","chana","kadala"]],"payar":["moong",["moong","green gram"]],"meen":["fish",["fish"]],"kozhi":["chicken",["chicken"]],"irachi":["meat",["meat","beef","mutton"]],
+ "vendakka":["okra",["okra","lady finger","bhindi"]],"vazhuthana":["brinjal",["brinjal","eggplant"]],"cabbage":["cabbage",["cabbage"]],"cheera":["spinach",["spinach"]],
+ "thairu":["yogurt",["yogurt","yoghurt","curd"]],"ney":["ghee",["ghee"]],"chaya podi":["tea",["tea"]],"kaapi podi":["coffee",["coffee"]],"atta":["atta",["atta","flour"]],"maida":["maida",["maida","flour"]],
+ "rava":["semolina",["rava","semolina","sooji"]],"sopp":["soap",["soap"]],"soap":["soap",["soap"]],"pril":["pril",["pril"]],"egg":["egg",["egg"]],"eggs":["egg",["egg"]]
+};
+function translate(raw){
+  const k=raw.trim().toLowerCase();
+  if(ML[k])return {input:raw.trim(),q:ML[k][0],kw:ML[k][1]};
+  const words=k.split(/\s+/).filter(w=>w.length>=3&&!/^\d/.test(w)&&!["pcs","kg","ltr","litre","pack","gram","gm"].includes(w));
+  const kw=words.length?words.map(w=>w.replace(/(es|s)$/,"")):[k];
+  return {input:raw.trim(),q:k.replace(/\b\d+(\.\d+)?\s*(kg|g|gm|l|ltr|ml|pcs)\b/g,"").trim()||k,kw};
+}
+
+// ---------- Saved state ----------
+const $=id=>document.getElementById(id);
+let st={emirate:"Abu Dhabi",area:"",items:"pril, soap, veppila, mallichep, neychor ari, dosa mavu, savaala, takkali, carrot, apple, egg",last:null};
+try{Object.assign(st,JSON.parse(localStorage.getItem("duaa")||"{}"))}catch(e){}
+function save(){try{localStorage.setItem("duaa",JSON.stringify(st))}catch(e){}}
+
+function renderLoc(){
+  const eb=$("emirates");eb.textContent="";
+  Object.keys(REGIONS).forEach(e=>{const b=document.createElement("button");b.className="chip";b.textContent=e;b.setAttribute("aria-pressed",String(st.emirate===e));
+    b.onclick=()=>{st.emirate=e;st.area="";save();renderLoc()};eb.appendChild(b)});
+  const ab=$("areas");ab.textContent="";
+  Object.keys(REGIONS[st.emirate].areas).forEach(a=>{const b=document.createElement("button");b.className="chip";b.textContent=a;b.setAttribute("aria-pressed",String(st.area===a));
+    b.onclick=()=>{st.area=a;save();renderLoc()};ab.appendChild(b)});
+}
+
+// ---------- GPS ----------
+$("gps").onclick=()=>{
+  if(!navigator.geolocation){$("locText").textContent="Location isn't available on this phone.";return}
+  $("locText").textContent="Finding you…";
+  navigator.geolocation.getCurrentPosition(p=>{
+    const {latitude:la,longitude:lo}=p.coords;let best=null;
+    for(const [e,r] of Object.entries(REGIONS))for(const [a,v] of Object.entries(r.areas)){
+      const d=Math.hypot(la-v[0],(lo-v[1])*Math.cos(la*Math.PI/180));if(!best||d<best.d)best={e,a,d}}
+    if(best&&best.d<0.6){st.emirate=best.e;st.area=best.a;save();renderLoc();$("locText").textContent="You're near "+best.a+", "+best.e+"."}
+    else $("locText").textContent="You seem to be outside the UAE areas I know. Pick one below.";
+  },err=>{$("locText").textContent=err.code===1?"Location permission was refused. Pick your area below.":"Couldn't get your location. Pick your area below."},
+  {enableHighAccuracy:false,timeout:15000,maximumAge:600000});
+};
+
+// ---------- Native fetch bridge ----------
+const pending={};let seq=0;
+window.__nativeDone=(id,ok,body)=>{const p=pending[id];if(!p)return;delete pending[id];ok?p.res(body):p.rej(new Error(body||"failed"))};
+function get(url){return new Promise((res,rej)=>{
+  if(!window.Native){rej(new Error("Open this inside the Duaa Shop app."));return}
+  const id="r"+(++seq);pending[id]={res,rej};setTimeout(()=>{if(pending[id]){delete pending[id];rej(new Error("timeout"))}},40000);
+  window.Native.fetch(id,url)})}
+async function limit(n,tasks){const out=[];let i=0;async function w(){while(i<tasks.length){const k=i++;try{out[k]=await tasks[k]()}catch(e){out[k]=null}}}
+  await Promise.all(Array.from({length:n},w));return out}
+
+// ---------- D4D parsing ----------
+const NICE={"k-m-trading":"K M Trading","k-m-hypermarket":"K.M Hypermarket","mark-save":"Mark & Save","bigmart":"BIGmart","adcoop":"ADCOOP","royal-gulf-hypermarket-llc":"Royal Gulf Hypermarket","express-al-madeena-hypermarket-llc":"Express Al Madeena","riviera-supermarket-l-l-c":"Riviera Supermarket","carrefour-uae":"Carrefour","spar-hyper-market":"SPAR"};
+function storeName(slug){slug=slug.replace(/^-+|-+$/g,"").replace(/-+/g,"-");if(NICE[slug])return NICE[slug];
+  return slug.split("-").map(w=>w.length<=2?w.toUpperCase():w[0].toUpperCase()+w.slice(1)).join(" ")}
+function parseSearch(html){
+  const doc=new DOMParser().parseFromString(html,"text/html");const out=[],seen=new Set();
+  doc.querySelectorAll('a[href*="/products/"]').forEach(a=>{
+    const href=a.getAttribute("href")||"";const m=href.match(/\/products\/([^\/?#]+?)-(\d+)\/(\d+)(?:[\/?#]|$)/);if(!m)return;
+    const pid=m[3];if(seen.has(pid))return;
+    const alt=[...a.querySelectorAll("img")].map(i=>i.getAttribute("alt")||"").join(" ");
+    const txt=(a.textContent+" "+alt).replace(/\s+/g," ");
+    let nums=[...txt.matchAll(/(?:AED|Dhs?)\.?\s*([\d,]+(?:\.\d+)?)/gi)].map(x=>parseFloat(x[1].replace(/,/g,"")));
+    if(!nums.length)nums=[...txt.matchAll(/\b(\d{1,4}\.\d{2})\b/g)].map(x=>parseFloat(x[1]));
+    nums=nums.filter(n=>n>0&&n<5000);if(!nums.length)return;
+    const price=Math.min(...nums),wasN=Math.max(...nums);
+    const am=alt.match(/available at\s+(.+)/i);
+    seen.add(pid);out.push({pid,price,was:wasN>price?wasN:null,store:am?am[1].trim():storeName(m[1]),url:new URL(href,"https://d4donline.com").href});
+  });
+  return out;
+}
+function parseProduct(html){
+  const doc=new DOMParser().parseFromString(html,"text/html");
+  let name=(doc.querySelector("h1")&&doc.querySelector("h1").textContent)||"";
+  if(name.trim().length<3){const og=doc.querySelector('meta[property="og:title"]');name=(og&&og.getAttribute("content"))||doc.title||""}
+  name=name.replace(/\s+/g," ").replace(/\s*[-|]\s*D4D.*$/i,"").replace(/\s+offers? in .*$/i,"").trim();
+  const body=(doc.body?doc.body.textContent:"").replace(/\s+/g," ");
+  const till=(body.match(/Till\s+(\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]+)/i)||[])[1]||"";
+  let branches="";const i=body.search(/Available Branches/i);if(i>=0)branches=body.slice(i+18,i+700);
+  return {name,till,branches,text:(name+" "+body.slice(0,3000)).toLowerCase()};
+}
+function nearKw(){const a=REGIONS[st.emirate].areas[st.area];return a?a[2]:[]}
+
+async function checkItem(t,slug){
+  const html=await get("https://d4donline.com/en/uae/"+slug+"/products?search="+encodeURIComponent(t.q));
+  const cands=parseSearch(html).sort((a,b)=>a.price-b.price);
+  const kws=t.kw.map(k=>k.toLowerCase()), near=nearKw();
+  const offers=[];
+  for(let i=0;i<cands.length&&i<10&&offers.length<5;i++){
+    const c=cands[i];
+    try{
+      const p=parseProduct(await get(c.url));
+      const nm=p.name.toLowerCase();
+      const relevant=nm?kws.some(k=>nm.includes(k)):kws.some(k=>p.text.includes(k));
+      if(!relevant)continue;
+      const br=p.branches.toLowerCase();
+      offers.push({...c,product:p.name,ends:p.till,near:near.some(k=>br.includes(k))});
+    }catch(e){}
+  }
+  return {...t,offers,found:cands.length};
+}
+
+// ---------- Run ----------
+$("items").value=st.items;
+$("items").addEventListener("input",()=>{st.items=$("items").value;save()});
+$("go").onclick=async()=>{
+  const list=$("items").value.split(/[\n,;]+/).map(s=>s.trim()).filter(Boolean);
+  if(!list.length){$("status").textContent="Add at least one item.";return}
+  const slug=REGIONS[st.emirate].slug;const ts=list.map(translate);
+  $("go").disabled=true;$("progBox").hidden=false;let done=0;
+  const tick=()=>{$("prog").style.width=Math.round(100*done/ts.length)+"%";$("status").textContent="Checking offers… "+done+" of "+ts.length+" items"};tick();
+  const res=await limit(4,ts.map(t=>async()=>{let r;try{r=await checkItem(t,slug)}catch(e){r={...t,offers:[],error:e.message}}done++;tick();return r}));
+  st.last={at:new Date().toISOString(),emirate:st.emirate,area:st.area,items:res};save();
+  $("go").disabled=false;$("progBox").hidden=true;render();
+};
+
+function aed(n){return n==null?"":"AED "+Number(n).toFixed(2)}
+function el(tag,cls,text){const e=document.createElement(tag);if(cls)e.className=cls;if(text!=null)e.textContent=text;return e}
+function openLink(url){const a=el("a","open","See offer ›");a.href="#";a.onclick=e=>{e.preventDefault();window.Native&&window.Native.openUrl(url)};return a}
+
+function render(){
+  const L=st.last;const ul=$("results"),sh=$("shops"),best=$("best");ul.textContent="";sh.textContent="";best.textContent="";
+  $("itemsHead").hidden=$("shopsHead").hidden=!L;
+  if(!L){ul.appendChild(el("div","empty","Tap Find offers to see the cheapest shop for each item and the shops with the most of your items."));$("status").textContent="";return}
+  const errs=L.items.filter(i=>i.error).length;
+  $("status").textContent="Checked "+new Date(L.at).toLocaleString([], {weekday:"short",hour:"numeric",minute:"2-digit"})+" · "+(L.area?L.area+", ":"")+L.emirate+(errs?" · "+errs+" items couldn't be checked (no internet?)":"");
+  // per item
+  const winners={};
+  L.items.forEach(it=>{
+    const li=el("li","item");const h=el("div","ihead");const n=el("span","iname",it.input);
+    if(it.q.toLowerCase()!==it.input.toLowerCase())n.appendChild(el("small",null," · "+it.q));h.appendChild(n);
+    const o=it.offers||[];const b=o[0];
+    if(b){winners[it.input]=b.store;const p=el("span","price",aed(b.price));if(b.was)p.appendChild(el("s",null,Number(b.was).toFixed(2)));h.appendChild(p)}
+    li.appendChild(h);
+    if(b){
+      const s=el("div");s.appendChild(el("span","shop",b.store));if(b.near)s.appendChild(el("span","near","Near you"));li.appendChild(s);
+      li.appendChild(el("div","where",[b.product,b.ends?"Ends "+b.ends:""].filter(Boolean).join(" · ")));
+      const nb=o.find(x=>x.near&&x.store!==b.store);
+      if(!b.near&&nb)li.appendChild(el("div","alt","Cheapest near you: "+nb.store+" "+aed(nb.price)));
+      const others=o.slice(1).filter(x=>x!==nb).slice(0,2);
+      if(others.length)li.appendChild(el("div","alt","Also: "+others.map(x=>x.store+" "+aed(x.price)).join(", ")));
+      li.appendChild(openLink(b.url));
+    }else li.appendChild(el("div","none",it.error?"Couldn't check this item. Try again.":"No offer found this week."));
+    ul.appendChild(li);
+  });
+  // shop ranking
+  const S={};
+  L.items.forEach(it=>(it.offers||[]).forEach(o=>{const s=S[o.store]||(S[o.store]={store:o.store,items:{},near:false});
+    if(!s.items[it.input]||o.price<s.items[it.input])s.items[it.input]=o.price;if(o.near)s.near=true}));
+  const total=L.items.length;
+  const shops=Object.values(S).map(s=>({...s,count:Object.keys(s.items).length,sum:Object.values(s.items).reduce((a,b)=>a+b,0)}))
+    .sort((a,b)=>b.count-a.count||(b.near-a.near)||a.sum-b.sum).slice(0,10);
+  if(shops.length){
+    const top=shops[0];const c=el("div","best");c.appendChild(el("span","k","Best one-stop shop"));c.appendChild(el("span","s",top.store));
+    c.appendChild(el("span",null,"Has "+top.count+" of your "+total+" items on offer"+(top.near?", with a branch near you":"")));best.appendChild(c);
+  }
+  shops.forEach((s,i)=>{
+    const li=el("li");const d=el("details","shopc");const sm=el("summary");
+    sm.appendChild(el("span","rank",String(i+1)));
+    const info=el("span","sinfo");const nm=el("span","shop",s.store);if(s.near)nm.appendChild(el("span","near","Near you"));info.appendChild(nm);
+    info.appendChild(el("span","where","Total "+aed(s.sum)+" for these items"));
+    const m=el("span","meter");const bar=el("i");bar.style.width=Math.round(100*s.count/total)+"%";m.appendChild(bar);info.appendChild(m);sm.appendChild(info);
+    const c=el("span","cnt",String(s.count));c.appendChild(el("small",null," of "+total));sm.appendChild(c);d.appendChild(sm);
+    const pl=el("div","plist");Object.entries(s.items).forEach(([k,v])=>{const w=winners[k]===s.store;
+      pl.appendChild(el("span",w?"win":null,k+(w?" ★ cheapest":"")));pl.appendChild(el("span",w?"win":null,aed(v)))});
+    d.appendChild(pl);li.appendChild(d);sh.appendChild(li);
+  });
+}
+renderLoc();render();
+</script>
+</body>
+</html>
