@@ -72,6 +72,9 @@ button.dir{background:var(--tag);color:var(--tag-fg);border-color:var(--tag);pad
 .links{display:flex;gap:14px;align-items:center;margin-top:4px}
 .links button.dir{margin-top:0;padding:6px 10px;font-size:.85rem}
 .best .where2{font-size:.85rem;margin-top:4px}
+.best .tot{font-family:var(--display);font-weight:800;font-size:1.5rem;line-height:1.1;margin-top:4px}
+.sumline{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-bottom:8px;font-size:.95rem}
+.sumline b{font-family:var(--display);font-size:1.15rem;color:var(--tag)}
 .best .k2{font-size:.9rem;font-weight:700;margin-top:6px;padding-top:6px;border-top:1px solid rgba(0,0,0,.15)}
 .empty{color:var(--muted);text-align:center;padding:18px;border:1px dashed var(--line);border-radius:10px}
 </style>
@@ -348,10 +351,9 @@ function render(){
       const pl=b.nearBranch||(b.branches||[]).slice(0,2).join(", ")+((!b.nearBranch&&(b.branches||[]).length>2)?" +"+(b.branches.length-2)+" more":"");
       const r=el("div","win-row");const top=el("div");top.appendChild(el("span","medal","Cheapest at"));top.appendChild(el("span","shop",b.store));
       if(b.near)top.appendChild(el("span","near","Near you"));r.appendChild(top);
-      if(pl)r.appendChild(el("div","where","📍 "+pl));
       const meta=[b.product,b.ends?"Ends "+b.ends:""].filter(Boolean).join(" · ");if(meta)r.appendChild(el("div","where",meta));
       li.appendChild(r);
-      const links=el("div","links");links.appendChild(dirBtn(b.store,b.nearBranch||(b.branches||[])[0]||"","📍 Map"));links.appendChild(openLink(b.url));li.appendChild(links);
+      li.appendChild(openLink(b.url));
     }else li.appendChild(el("div","none",it.error?"Couldn't check this item. Try again.":"No offer found this week."));
     ul.appendChild(li);
   });
@@ -364,7 +366,9 @@ function render(){
     .sort((a,b)=>b.count-a.count||(b.near-a.near)||a.sum-b.sum).slice(0,15);
   if(shops.length){
     const card=(x,label,cls)=>{const c=el("div",cls);c.appendChild(el("span","k",label));c.appendChild(el("span","s",x.store));
-      c.appendChild(el("span",null,x.count+" of your "+total+" items on offer · Total "+aed(x.sum)));
+      c.appendChild(el("span","tot","≈ "+aed(x.sum)));
+      const miss=total-x.count;
+      c.appendChild(el("span",null,"Approx. total for "+x.count+" of your "+total+" items"+(miss?" · "+miss+" item"+(miss>1?"s":"")+" not on offer here":"")));
       if(x.nb)c.appendChild(el("span",null,"📍 "+x.nb));
       const wins=Object.keys(x.items).filter(k=>winners[k]===x.store);
       if(wins.length)c.appendChild(el("span","wins","★ Cheapest for: "+wins.join(", ")));
@@ -372,6 +376,10 @@ function render(){
       c.appendChild(el("span","where2",place?"Go to: "+x.store+", "+place:"Opens the nearest "+x.store+" in Google Maps"));
       c.appendChild(dirBtn(x.store,place));
       return c};
+    const cheapAll=L.items.reduce((a,it)=>a+((it.offers&&it.offers[0])?it.offers[0].price:0),0);
+    const cheapN=L.items.filter(it=>it.offers&&it.offers[0]).length;
+    const sum=el("div","sumline");sum.appendChild(el("span",null,"Whole list at the cheapest shops: "));sum.appendChild(el("b",null,"≈ "+aed(cheapAll)));
+    sum.appendChild(el("span",null," ("+cheapN+" of "+total+" items)"));best.appendChild(sum);
     best.appendChild(card(shops[0],"🥇 Best one-stop shop","best"));
     if(shops[1])best.appendChild(card(shops[1],"🥈 2nd best one-stop shop","best second"));
   }
