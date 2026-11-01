@@ -75,6 +75,14 @@ button.dir{background:var(--tag);color:var(--tag-fg);border-color:var(--tag);pad
 .best .tot{font-family:var(--display);font-weight:800;font-size:1.5rem;line-height:1.1;margin-top:4px}
 .sumline{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-bottom:8px;font-size:.95rem}
 .sumline b{font-family:var(--display);font-size:1.15rem;color:var(--tag)}
+.nearpanel{background:var(--card);border:2px solid var(--ok);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;margin-bottom:8px}
+.nearpanel .k{font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ok)}
+.nrow{display:flex;gap:10px;align-items:center;border-top:1px solid var(--line);padding-top:8px}
+.ninfo{flex:1;min-width:0;display:flex;flex-direction:column}
+.nrow button.dir{margin-top:0;padding:7px 14px}
+.histbtn{width:100%;text-align:left;display:flex;flex-direction:column;gap:2px;font-weight:400;margin-bottom:6px}
+.hwhen{font-size:.78rem;color:var(--muted);font-weight:700}
+.hlist{font-size:.9rem;overflow-wrap:anywhere}
 .best .k2{font-size:.9rem;font-weight:700;margin-top:6px;padding-top:6px;border-top:1px solid rgba(0,0,0,.15)}
 .empty{color:var(--muted);text-align:center;padding:18px;border:1px dashed var(--line);border-radius:10px}
 </style>
@@ -103,7 +111,14 @@ button.dir{background:var(--tag);color:var(--tag-fg);border-color:var(--tag);pad
     <div class="status" id="status"></div>
   </section>
 
+  <details class="panel" id="histPanel" hidden>
+    <summary class="lbl" style="cursor:pointer">🕘 Search history</summary>
+    <ul id="history" style="margin-top:8px"></ul>
+    <button id="histClear" style="align-self:flex-start;font-size:.85rem;padding:6px 10px">Clear history</button>
+  </details>
+
   <section style="display:flex;flex-direction:column;gap:10px">
+    <div id="nearbox"></div>
     <div id="best"></div>
     <h2 id="itemsHead" hidden>Cheapest shop for each item</h2>
     <ul id="results"></ul>
@@ -201,7 +216,7 @@ function translate(raw){
 
 // ---------- Saved state ----------
 const $=id=>document.getElementById(id);
-let st={emirate:"Abu Dhabi",area:"",items:"pril, soap, veppila, mallichep, neychor ari, dosa mavu, savaala, takkali, carrot, apple, egg",last:null};
+let st={emirate:"Abu Dhabi",area:"",items:"pril, soap, veppila, mallichep, neychor ari, dosa mavu, savaala, takkali, carrot, apple, egg",last:null,history:[]};
 try{Object.assign(st,JSON.parse(localStorage.getItem("duaa")||"{}"))}catch(e){}
 function save(){try{localStorage.setItem("duaa",JSON.stringify(st))}catch(e){}}
 
@@ -351,7 +366,9 @@ $("go").onclick=async()=>{
   try{await session(slug,true)}catch(e){}
   const res=await limit(3,ts.map(t=>async()=>{let r;try{r=await checkItem(t,slug)}catch(e){r={...t,offers:[],error:e.message}}done++;tick();return r}));
   for(let i=0;i<res.length;i++)if(res[i]&&res[i].error){$("status").textContent="Re-checking "+res[i].input+"…";try{res[i]=await checkItem(ts[i],slug)}catch(e){}}
-  st.last={at:new Date().toISOString(),emirate:st.emirate,area:st.area,items:res};save();
+  st.last={at:new Date().toISOString(),emirate:st.emirate,area:st.area,items:res,list:list.join(", ")};
+  st.history=[st.last].concat((st.history||[]).filter(h=>h.list!==st.last.list||h.area!==st.last.area)).slice(0,10);
+  save();renderHistory();
   $("go").disabled=false;$("progBox").hidden=true;render();
 };
 
@@ -359,6 +376,18 @@ function aed(n){return n==null?"":"AED "+Number(n).toFixed(2)}
 function el(tag,cls,text){const e=document.createElement(tag);if(cls)e.className=cls;if(text!=null)e.textContent=text;return e}
 function openLink(url){const a=el("a","open","See offer ›");a.href="#";a.onclick=e=>{e.preventDefault();window.Native&&window.Native.openUrl(url)};return a}
 
+function renderHistory(){
+  const H=st.history||[];$("histPanel").hidden=!H.length;const ul=$("history");ul.textContent="";
+  H.forEach((h,i)=>{const li=el("li","hist");const b=el("button","histbtn");
+    const when=new Date(h.at).toLocaleString([], {day:"numeric",month:"short",hour:"numeric",minute:"2-digit"});
+    b.appendChild(el("span","hwhen",when+" · "+(h.area?h.area+", ":"")+h.emirate));
+    b.appendChild(el("span","hlist",h.list||h.items.map(x=>x.input).join(", ")));
+    b.onclick=()=>{st.last=h;st.items=h.list||h.items.map(x=>x.input).join(", ");$("items").value=st.items;
+      if(h.emirate){st.emirate=h.emirate;st.area=h.area||""}save();renderLoc();render();window.scrollTo(0,0);
+      $("status").textContent+=" · From history: tap Find offers for today's prices"};
+    li.appendChild(b);ul.appendChild(li)});
+}
+$("histClear").onclick=()=>{st.history=[];save();renderHistory()};
 function mapsUrl(store,branch){
   const L=st.last||{};const parts=[store,branch||L.area||"",L.emirate||st.emirate,"UAE"].filter(Boolean);
   return "https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(parts.join(" "));
@@ -366,7 +395,7 @@ function mapsUrl(store,branch){
 function dirBtn(store,branch,label){const b=el("button","dir",label||"📍 Directions");
   b.onclick=e=>{e.preventDefault();e.stopPropagation();window.Native&&window.Native.openUrl(mapsUrl(store,branch))};return b}
 function render(){
-  const L=st.last;const ul=$("results"),sh=$("shops"),best=$("best");ul.textContent="";sh.textContent="";best.textContent="";
+  const L=st.last;const ul=$("results"),sh=$("shops"),best=$("best");ul.textContent="";sh.textContent="";best.textContent="";$("nearbox").textContent="";
   $("itemsHead").hidden=$("shopsHead").hidden=!L;
   if(!L){ul.appendChild(el("div","empty","Tap Find offers to see the cheapest shop for each item and the shops with the most of your items."));$("status").textContent="";return}
   const errs=L.items.filter(i=>i.error).length;
@@ -397,6 +426,18 @@ function render(){
   const total=L.items.length;
   const shops=Object.values(S).map(s=>({...s,count:Object.keys(s.items).length,sum:Object.values(s.items).reduce((a,b)=>a+b,0)}))
     .sort((a,b)=>b.count-a.count||(b.near-a.near)||a.sum-b.sum).slice(0,15);
+  // Shops near you: every shop with a branch in the chosen area, most items first
+  const nb=$("nearbox");nb.textContent="";
+  const allShops=Object.values(S).map(s=>({...s,count:Object.keys(s.items).length,sum:Object.values(s.items).reduce((a,b)=>a+b,0)}));
+  const nearShops=allShops.filter(x=>x.near).sort((a,b)=>b.count-a.count||a.sum-b.sum);
+  if(L.area){
+    const box=el("div","nearpanel");box.appendChild(el("span","k","🏪 Supermarkets near you · "+L.area));
+    if(!nearShops.length)box.appendChild(el("span","where","No offers on your items at branches listed in "+L.area+" this week. Try a nearby area."));
+    nearShops.slice(0,8).forEach(x=>{const r=el("div","nrow");const t=el("div","ninfo");
+      t.appendChild(el("span","shop",x.store));t.appendChild(el("span","where","📍 "+x.nb+" · "+x.count+" of "+total+" items · ≈ "+aed(x.sum)));
+      r.appendChild(t);r.appendChild(dirBtn(x.store,x.nb,"Go"));box.appendChild(r)});
+    nb.appendChild(box);
+  }else nb.appendChild(el("div","sumline","Tap 📍 Use my location (or pick an area) to see supermarkets near you."));
   if(shops.length){
     const card=(x,label,cls)=>{const c=el("div",cls);c.appendChild(el("span","k",label));c.appendChild(el("span","s",x.store));
       c.appendChild(el("span","tot","≈ "+aed(x.sum)));
@@ -428,7 +469,7 @@ function render(){
     d.appendChild(pl);li.appendChild(d);sh.appendChild(li);
   });
 }
-renderLoc();render();
+renderLoc();renderHistory();render();
 </script>
 </body>
 </html>
