@@ -180,17 +180,28 @@ function renderLoc(){
 }
 
 // ---------- GPS ----------
+function nearestArea(la,lo){let best=null;
+  for(const [e,r] of Object.entries(REGIONS))for(const [a,v] of Object.entries(r.areas)){
+    const d=Math.hypot(la-v[0],(lo-v[1])*Math.cos(la*Math.PI/180));if(!best||d<best.d)best={e,a,d}}
+  return best}
+function applyLoc(la,lo){const best=nearestArea(la,lo);
+  if(best&&best.d<0.6){st.emirate=best.e;st.area=best.a;save();renderLoc();$("locText").textContent="📍 You're near "+best.a+", "+best.e+"."}
+  else $("locText").textContent="You seem to be outside the UAE areas I know. Pick one below."}
 $("gps").onclick=()=>{
-  if(!navigator.geolocation){$("locText").textContent="Location isn't available on this phone.";return}
-  $("locText").textContent="Finding you…";
-  navigator.geolocation.getCurrentPosition(p=>{
-    const {latitude:la,longitude:lo}=p.coords;let best=null;
-    for(const [e,r] of Object.entries(REGIONS))for(const [a,v] of Object.entries(r.areas)){
-      const d=Math.hypot(la-v[0],(lo-v[1])*Math.cos(la*Math.PI/180));if(!best||d<best.d)best={e,a,d}}
-    if(best&&best.d<0.6){st.emirate=best.e;st.area=best.a;save();renderLoc();$("locText").textContent="You're near "+best.a+", "+best.e+"."}
-    else $("locText").textContent="You seem to be outside the UAE areas I know. Pick one below.";
-  },err=>{$("locText").textContent=err.code===1?"Location permission was refused. Pick your area below.":"Couldn't get your location. Pick your area below."},
-  {enableHighAccuracy:false,timeout:15000,maximumAge:600000});
+  $("locText").textContent="Finding you… (up to 20 seconds)";
+  if(window.Native&&window.Native.getLocation){
+    const id="l"+(++seq);
+    pending[id]={res:b=>{try{const p=JSON.parse(b);applyLoc(p.lat,p.lon)}catch(e){$("locText").textContent="Couldn't read your location. Pick your area below."}},
+      rej:e=>{const m=String(e&&e.message||"");
+        if(m==="off"){$("locText").textContent="Location is turned off on your phone. ";const a=document.createElement("a");a.href="#";a.textContent="Turn it on";a.className="open";a.onclick=ev=>{ev.preventDefault();window.Native.openSettings()};$("locText").appendChild(a)}
+        else if(m==="denied")$("locText").textContent="Location permission was refused. Allow it in Settings → Apps → Duaa Shop → Permissions, or pick your area below.";
+        else $("locText").textContent="Couldn't get your location ("+m+"). Go near a window or pick your area below."}};
+    setTimeout(()=>{if(pending[id]){delete pending[id];$("locText").textContent="Location took too long. Pick your area below."}},30000);
+    window.Native.getLocation(id);return;
+  }
+  if(!navigator.geolocation){$("locText").textContent="Location isn't available. Pick your area below.";return}
+  navigator.geolocation.getCurrentPosition(p=>applyLoc(p.coords.latitude,p.coords.longitude),
+    ()=>{$("locText").textContent="Couldn't get your location. Pick your area below."},{timeout:15000,maximumAge:600000});
 };
 
 // ---------- Native fetch bridge ----------

@@ -28,6 +28,7 @@ public class MainActivity extends Activity {
     private WebView web;
     private final ExecutorService pool = Executors.newFixedThreadPool(6);
     private GeolocationPermissions.Callback pendingGeo;
+    private String pendingLocId;
     private String pendingOrigin;
 
     @Override
@@ -73,6 +74,55 @@ public class MainActivity extends Activity {
             pendingGeo.invoke(pendingOrigin, hasLocation(), false);
             pendingGeo = null;
         }
+        if (requestCode == 8 && pendingLocId != null) {
+            String id = pendingLocId;
+            pendingLocId = null;
+            if (hasLocation()) locate(id);
+            else deliver(id, false, "denied");
+        }
+    }
+
+    /** Get the phone's position with Android's own location service and return {"lat":..,"lon":..}. */
+    @SuppressWarnings("MissingPermission")
+    private void locate(final String id) {
+        final android.location.LocationManager lm = (android.location.LocationManager) getSystemService(LOCATION_SERVICE);
+        if (lm == null) { deliver(id, false, "unavailable"); return; }
+        boolean net = false, gps = false;
+        try { net = lm.isProviderEnabled(android.location.LocationManager.NETWORK_PROVIDER); } catch (Exception ignored) {}
+        try { gps = lm.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER); } catch (Exception ignored) {}
+        if (!net && !gps) { deliver(id, false, "off"); return; }
+        android.location.Location best = null;
+        for (String p : lm.getProviders(true)) {
+            try {
+                android.location.Location l = lm.getLastKnownLocation(p);
+                if (l != null && (best == null || l.getTime() > best.getTime())) best = l;
+            } catch (Exception ignored) {}
+        }
+        if (best != null && System.currentTimeMillis() - best.getTime() < 15 * 60 * 1000) { sendLoc(id, best); return; }
+        final android.location.Location fallback = best;
+        final boolean[] done = {false};
+        final String provider = net ? android.location.LocationManager.NETWORK_PROVIDER : android.location.LocationManager.GPS_PROVIDER;
+        final android.os.Handler h = new android.os.Handler(getMainLooper());
+        final android.location.LocationListener listener = new android.location.LocationListener() {
+            @Override public void onLocationChanged(android.location.Location l) {
+                if (done[0]) return; done[0] = true; lm.removeUpdates(this); sendLoc(id, l);
+            }
+            @Override public void onStatusChanged(String p, int s, Bundle b) {}
+            @Override public void onProviderEnabled(String p) {}
+            @Override public void onProviderDisabled(String p) {}
+        };
+        try {
+            lm.requestLocationUpdates(provider, 0, 0, listener, getMainLooper());
+            if (net && gps) lm.requestLocationUpdates(android.location.LocationManager.GPS_PROVIDER, 0, 0, listener, getMainLooper());
+        } catch (Exception e) { deliver(id, false, String.valueOf(e.getMessage())); return; }
+        h.postDelayed(() -> {
+            if (done[0]) return; done[0] = true; lm.removeUpdates(listener);
+            if (fallback != null) sendLoc(id, fallback); else deliver(id, false, "timeout");
+        }, 20000);
+    }
+
+    private void sendLoc(String id, android.location.Location l) {
+        deliver(id, true, "{\"lat\":" + l.getLatitude() + ",\"lon\":" + l.getLongitude() + "}");
     }
 
     @Override
@@ -144,6 +194,23 @@ public class MainActivity extends Activity {
                     if (c != null) c.disconnect();
                 }
             });
+        }
+
+        @JavascriptInterface
+        public void getLocation(final String id) {
+            runOnUiThread(() -> {
+                if (hasLocation()) locate(id);
+                else if (Build.VERSION.SDK_INT >= 23) {
+                    pendingLocId = id;
+                    requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION,
+                            Manifest.permission.ACCESS_COARSE_LOCATION}, 8);
+                } else deliver(id, false, "denied");
+            });
+        }
+
+        @JavascriptInterface
+        public void openSettings() {
+            runOnUiThread(() -> startActivity(new Intent(android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS)));
         }
 
         @JavascriptInterface
