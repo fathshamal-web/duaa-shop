@@ -83,6 +83,9 @@ button.dir{background:var(--tag);color:var(--tag-fg);border-color:var(--tag);pad
 .histbtn{width:100%;text-align:left;display:flex;flex-direction:column;gap:2px;font-weight:400;margin-bottom:6px}
 .hwhen{font-size:.78rem;color:var(--muted);font-weight:700}
 .hlist{font-size:.9rem;overflow-wrap:anywhere}
+.best .dist{font-weight:700;margin-top:4px}
+.best .far{font-size:.86rem;font-weight:700;color:var(--tag);margin-top:4px}
+.best.second .far{color:var(--tag)}
 .best .k2{font-size:.9rem;font-weight:700;margin-top:6px;padding-top:6px;border-top:1px solid rgba(0,0,0,.15)}
 .empty{color:var(--muted);text-align:center;padding:18px;border:1px dashed var(--line);border-radius:10px}
 </style>
@@ -234,7 +237,7 @@ function nearestArea(la,lo){let best=null;
   for(const [e,r] of Object.entries(REGIONS))for(const [a,v] of Object.entries(r.areas)){
     const d=Math.hypot(la-v[0],(lo-v[1])*Math.cos(la*Math.PI/180));if(!best||d<best.d)best={e,a,d}}
   return best}
-function applyLoc(la,lo){const best=nearestArea(la,lo);
+function applyLoc(la,lo){const best=nearestArea(la,lo);if(best)st.gps={lat:la,lon:lo,area:best.a,at:Date.now()};
   if(best&&best.d<0.6){st.emirate=best.e;st.area=best.a;save();renderLoc();$("locText").textContent="📍 You're near "+best.a+", "+best.e+"."}
   else $("locText").textContent="You seem to be outside the UAE areas I know. Pick one below."}
 $("gps").onclick=()=>{
@@ -315,6 +318,35 @@ async function searchAll(q,slug){
   }
   return all;
 }
+// Approximate points for branch names seen on D4D (area level, not exact shop doors)
+const EXTRA_PTS=[
+ [["airport road","airport rd"],24.444,54.392],[["mushrif"],24.443,54.383],[["al nahyan","nahyan camp"],24.459,54.385],[["bateen"],24.455,54.333],
+ [["khalidiya","khalidiyah","khalidia"],24.471,54.347],[["corniche"],24.476,54.338],[["electra"],24.485,54.366],[["hamdan"],24.490,54.368],
+ [["tourist club","tca","zahiyah","zahiya"],24.497,54.380],[["najda"],24.483,54.373],[["markaziya","madinat zayed (abu"],24.487,54.360],
+ [["mina","port zayed"],24.518,54.385],[["reem"],24.497,54.405],[["saadiyat"],24.540,54.435],[["wahda"],24.470,54.373],[["muroor"],24.456,54.378],
+ [["danet"],24.430,54.430],[["khalifa park"],24.420,54.465],[["bain al jessrain","between two bridges"],24.410,54.500],
+ [["raha"],24.448,54.610],[["yas"],24.495,54.605],[["khalifa city","khalifa a","khalifa b"],24.420,54.580],[["shakhbout","shakbout"],24.360,54.650],
+ [["mohammed bin zayed","mbz","shabiya","shabia","me-10","me-11","me-12","me 11","me 12"],24.335,54.555],
+ [["musaffah","mussafah","musafah","m-26","m26","m 26","m37","m-37","icad","mw4","sanayya","sanaiya musaffah"],24.355,54.505],
+ [["baniyas","bani yas"],24.300,54.640],[["shamkha"],24.390,54.700],[["falah"],24.440,54.730],[["reef"],24.455,54.680],
+ [["mafraq","hameem"],24.280,54.580],[["madinat zayed","western region","dhafra"],23.690,53.700],[["ruwais"],24.110,52.730],
+ [["al ain"],24.207,55.744],[["dubai"],25.204,55.270],[["sharjah"],25.346,55.420],[["ajman"],25.405,55.513]
+];
+function branchPts(){const pts=[];
+  for(const r of Object.values(REGIONS))for(const v of Object.values(r.areas))pts.push([v[2],v[0],v[1]]);
+  return EXTRA_PTS.concat(pts)}
+const PTS=branchPts();
+function pointFor(name){const n=String(name||"").toLowerCase();let best=null;
+  for(const [kws,la,lo] of PTS)for(const k of kws)if(n.includes(k)&&(!best||k.length>best.k.length))best={k,la,lo};
+  return best}
+function kmBetween(a,b){const R=6371,dLa=(b.la-a.la)*Math.PI/180,dLo=(b.lo-a.lo)*Math.PI/180;
+  const x=Math.sin(dLa/2)**2+Math.cos(a.la*Math.PI/180)*Math.cos(b.la*Math.PI/180)*Math.sin(dLo/2)**2;return 2*R*Math.asin(Math.sqrt(x))}
+function userPt(L){if(st.gps&&(!L||!L.area||st.gps.area===L.area))return {la:st.gps.lat,lo:st.gps.lon,src:"gps"};
+  const em=(L&&L.emirate)||st.emirate,ar=(L&&L.area)||st.area;const a=REGIONS[em]&&REGIONS[em].areas[ar];return a?{la:a[0],lo:a[1],src:"area"}:null}
+function nearestBranch(branches,me){if(!me)return null;let best=null;
+  for(const b of branches){const p=pointFor(b);if(!p)continue;const km=kmBetween(me,p);if(!best||km<best.km)best={branch:b.trim(),km,src:me.src}}
+  return best}
+function kmText(km,src){if(src==="area"&&km<3)return "in your area";return km<1?"under 1 km":"≈ "+(km<10?km.toFixed(1):Math.round(km))+" km"}
 function nearKw(){const a=REGIONS[st.emirate].areas[st.area];return a?a[2]:[]}
 function cleanDesc(d,store){
   let t=String(d||"").split("\n")[0];
@@ -421,20 +453,23 @@ function render(){
   });
   // shop ranking
   const S={};
-  L.items.forEach(it=>(it.offers||[]).forEach(o=>{const s=S[o.store]||(S[o.store]={store:o.store,items:{},near:false,nb:""});
-    if(!s.items[it.input]||o.price<s.items[it.input])s.items[it.input]=o.price;if(o.near){s.near=true;s.nb=s.nb||o.nearBranch}}));
+  const me=userPt(L);
+  L.items.forEach(it=>(it.offers||[]).forEach(o=>{const s=S[o.store]||(S[o.store]={store:o.store,items:{},near:false,nb:"",br:new Set()});
+    if(!s.items[it.input]||o.price<s.items[it.input])s.items[it.input]=o.price;if(o.near){s.near=true;s.nb=s.nb||o.nearBranch}
+    (o.branches||[]).forEach(b=>s.br.add(b))}));
+  Object.values(S).forEach(s=>{const n=nearestBranch([...s.br],me);s.dist=n;if(n){s.nb=n.branch;if(n.km<=4)s.near=true}});
   const total=L.items.length;
   const shops=Object.values(S).map(s=>({...s,count:Object.keys(s.items).length,sum:Object.values(s.items).reduce((a,b)=>a+b,0)}))
     .sort((a,b)=>b.count-a.count||(b.near-a.near)||a.sum-b.sum).slice(0,15);
   // Shops near you: every shop with a branch in the chosen area, most items first
   const nb=$("nearbox");nb.textContent="";
   const allShops=Object.values(S).map(s=>({...s,count:Object.keys(s.items).length,sum:Object.values(s.items).reduce((a,b)=>a+b,0)}));
-  const nearShops=allShops.filter(x=>x.near).sort((a,b)=>b.count-a.count||a.sum-b.sum);
+  const nearShops=allShops.filter(x=>x.near||(x.dist&&x.dist.km<=6)).sort((a,b)=>((a.dist?a.dist.km:99)-(b.dist?b.dist.km:99))||b.count-a.count);
   if(L.area){
     const box=el("div","nearpanel");box.appendChild(el("span","k","🏪 Supermarkets near you · "+L.area));
     if(!nearShops.length)box.appendChild(el("span","where","No offers on your items at branches listed in "+L.area+" this week. Try a nearby area."));
     nearShops.slice(0,8).forEach(x=>{const r=el("div","nrow");const t=el("div","ninfo");
-      t.appendChild(el("span","shop",x.store));t.appendChild(el("span","where","📍 "+x.nb+" · "+x.count+" of "+total+" items · ≈ "+aed(x.sum)));
+      t.appendChild(el("span","shop",x.store+(x.dist?" · "+kmText(x.dist.km,x.dist.src):"")));t.appendChild(el("span","where","📍 "+x.nb+" · "+x.count+" of "+total+" items · ≈ "+aed(x.sum)));
       r.appendChild(t);r.appendChild(dirBtn(x.store,x.nb,"Go"));box.appendChild(r)});
     nb.appendChild(box);
   }else nb.appendChild(el("div","sumline","Tap 📍 Use my location (or pick an area) to see supermarkets near you."));
@@ -443,11 +478,14 @@ function render(){
       c.appendChild(el("span","tot","≈ "+aed(x.sum)));
       const miss=total-x.count;
       c.appendChild(el("span",null,"Approx. total for "+x.count+" of your "+total+" items"+(miss?" · "+miss+" item"+(miss>1?"s":"")+" not on offer here":"")));
-      if(x.nb)c.appendChild(el("span",null,"📍 "+x.nb));
+      if(x.dist)c.appendChild(el("span","dist","📍 Nearest branch: "+x.dist.branch+" · "+kmText(x.dist.km,x.dist.src)+(x.dist.src==="area"&&x.dist.km<3?"":" from you")));
+      else if(x.nb)c.appendChild(el("span",null,"📍 "+x.nb));
+      else c.appendChild(el("span",null,"📍 Branch not listed; Directions finds the nearest one"));
+      if(x.dist&&x.dist.km>8){const alt=nearShops.find(n=>n.store!==x.store);
+        c.appendChild(el("span","far","⚠ Far from you"+(alt?". Closer option: "+alt.store+" ("+(alt.dist?kmText(alt.dist.km,alt.dist.src):"nearby")+", "+alt.count+" of "+total+" items, ≈ "+aed(alt.sum)+")":"")))}
       const wins=Object.keys(x.items).filter(k=>winners[k]===x.store);
       if(wins.length)c.appendChild(el("span","wins","★ Cheapest for: "+wins.join(", ")));
-      const place=x.nb||"";
-      c.appendChild(el("span","where2",place?"Go to: "+x.store+", "+place:"Opens the nearest "+x.store+" in Google Maps"));
+      const place=(x.dist&&x.dist.branch)||x.nb||"";
       c.appendChild(dirBtn(x.store,place));
       return c};
     const cheapAll=L.items.reduce((a,it)=>a+((it.offers&&it.offers[0])?it.offers[0].price:0),0);
