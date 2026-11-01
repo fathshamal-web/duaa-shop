@@ -212,20 +212,34 @@ function parseSearch(html){
     if(!nums.length)nums=[...txt.matchAll(/\b(\d{1,4}\.\d{2})\b/g)].map(x=>parseFloat(x[1]));
     nums=nums.filter(n=>n>0&&n<5000);if(!nums.length)return;
     const price=Math.min(...nums),wasN=Math.max(...nums);
-    const am=alt.match(/available at\s+(.+)/i);
-    seen.add(pid);out.push({pid,price,was:wasN>price?wasN:null,store:am?am[1].trim():storeName(m[1]),url:new URL(href,"https://d4donline.com").href});
+    const title=(a.getAttribute("title")||alt||"").replace(/\s+/g," ").trim();
+    const cardName=(title.match(/^(.*?)\s*available at/i)||[])[1]||"";
+    const pd=a.querySelector(".product-description");
+    let store=(a.getAttribute("data-pic-desc")||(pd&&pd.textContent)||"").replace(/\s+/g," ").trim();
+    if(!store){const am=title.match(/available at\s+(.+?)(?:\s+in UAE.*)?$/i);store=am?am[1].trim():storeName(m[1])}
+    seen.add(pid);out.push({pid,price,was:wasN>price?wasN:null,store:niceStore(store),cardName,url:new URL(href,"https://d4donline.com").href});
   });
   return out;
 }
+function niceStore(s){s=s.replace(/\s+/g," ").trim();
+  if(s===s.toUpperCase())s=s.toLowerCase().replace(/\b[a-z]/g,c=>c.toUpperCase()).replace(/\bLlc\b/,"LLC").replace(/\bL\.l\.c\b/i,"LLC");
+  return s.replace(/\s+LLC$/,"").replace(/^Carrefour UAE$/,"Carrefour")}
 function parseProduct(html){
   const doc=new DOMParser().parseFromString(html,"text/html");
-  let name=(doc.querySelector("h1")&&doc.querySelector("h1").textContent)||"";
-  if(name.trim().length<3){const og=doc.querySelector('meta[property="og:title"]');name=(og&&og.getAttribute("content"))||doc.title||""}
-  name=name.replace(/\s+/g," ").replace(/\s*[-|]\s*D4D.*$/i,"").replace(/\s+offers? in .*$/i,"").trim();
+  // D4D product pages: <h1 class="product-name"> is usually empty and <h1 class="outlet-name"> is the shop.
+  // The real product text (read from the flyer) is in <title>, e.g. "... 17.99 10.99 crystal sunflower oil 1.5 ltr\ndesert fresh market"
+  const pn=doc.querySelector("h1.product-name");
+  let raw=(pn&&pn.textContent.trim())||"";
+  const t=(doc.querySelector("title")&&doc.querySelector("title").textContent)||"";
+  const firstLine=t.split("\n")[0].replace(/\s+/g," ").trim();
+  if(raw.length<3){const mm=firstLine.match(/(?:\d+\.\d{2}\s+)+([^\d].*)$/);raw=mm?mm[1]:firstLine}
+  const name=raw.replace(/[\[\]ð]/g,"").replace(/\s+/g," ").replace(/^\.+\s*/,"").trim().slice(0,70);
+  const ab=doc.querySelector(".all-branch");
+  const branches=(ab?ab.textContent:"").replace(/\s+/g," ").trim();
+  const desc=doc.querySelector("p.description");
   const body=(doc.body?doc.body.textContent:"").replace(/\s+/g," ");
-  const till=(body.match(/Till\s+(\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]+)/i)||[])[1]||"";
-  let branches="";const i=body.search(/Available Branches/i);if(i>=0)branches=body.slice(i+18,i+700);
-  return {name,till,branches,text:(name+" "+body.slice(0,3000)).toLowerCase()};
+  const till=((desc&&desc.textContent)||body).match(/Till\s+(\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]+)/i);
+  return {name,till:till?till[1]:"",branches,text:(t+" "+name).toLowerCase()};
 }
 function nearKw(){const a=REGIONS[st.emirate].areas[st.area];return a?a[2]:[]}
 
@@ -238,11 +252,10 @@ async function checkItem(t,slug){
     const c=cands[i];
     try{
       const p=parseProduct(await get(c.url));
-      const nm=p.name.toLowerCase();
-      const relevant=nm?kws.some(k=>nm.includes(k)):kws.some(k=>p.text.includes(k));
-      if(!relevant)continue;
+      const hay=(c.cardName+" "+p.text).toLowerCase();
+      if(!kws.some(k=>hay.includes(k)))continue;
       const br=p.branches.toLowerCase();
-      offers.push({...c,product:p.name,ends:p.till,near:near.some(k=>br.includes(k))});
+      offers.push({...c,product:c.cardName&&c.cardName.length>p.name.length?c.cardName:p.name,ends:p.till,near:near.some(k=>br.includes(k))});
     }catch(e){}
   }
   return {...t,offers,found:cands.length};
