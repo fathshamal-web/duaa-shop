@@ -1,5 +1,7 @@
 name: Probe D4D pages
 on: workflow_dispatch
+permissions:
+  contents: write
 jobs:
   probe:
     runs-on: ubuntu-latest
@@ -12,7 +14,10 @@ jobs:
           curl -sSL -A "$UA" -H "Accept-Language: en" -o pages/search_egg.html -w "search %{http_code} %{size_download}\n" "https://d4donline.com/en/uae/abu-dhabi/products?search=egg"
           curl -sSL -A "$UA" -H "Accept-Language: en" -o pages/product.html -w "product %{http_code} %{size_download}\n" "https://d4donline.com/en/uae/abu-dhabi/products/desert-fresh-market--2990/100260831/top-product"
           curl -sSL -A "$UA" -o pages/clicflyer.html -w "clicflyer %{http_code} %{size_download}\n" "https://clicflyer.com/shoppers/en/united-arab-emirates/abu-dhabi/home" || true
-      - uses: actions/upload-artifact@v4
-        with:
-          name: pages
-          path: pages
+      - name: Save pages to probe branch
+        run: |
+          cd pages
+          git init -q -b probe
+          git -c user.name=bot -c user.email=bot@example.com add -A
+          git -c user.name=bot -c user.email=bot@example.com commit -qm "probe pages"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}" probe
