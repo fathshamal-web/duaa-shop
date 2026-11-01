@@ -66,6 +66,8 @@ details.shopc summary::-webkit-details-marker{display:none}
 .medal{font-size:.8rem;font-weight:700;margin-right:6px;color:var(--muted)}
 .price2{font-family:var(--display);font-weight:800;color:var(--tag);margin-left:8px;white-space:nowrap}
 .price2 s{font-family:var(--body);font-weight:400;font-size:.78rem;color:var(--muted);margin-left:4px}
+.best.second{background:var(--card);color:var(--fg);border:2px solid var(--hi);margin-top:8px}
+.best .wins{font-size:.85rem;font-weight:700;margin-top:4px}
 .best .k2{font-size:.9rem;font-weight:700;margin-top:6px;padding-top:6px;border-top:1px solid rgba(0,0,0,.15)}
 .empty{color:var(--muted);text-align:center;padding:18px;border:1px dashed var(--line);border-radius:10px}
 </style>
@@ -333,19 +335,12 @@ function render(){
     if(b){winners[it.input]=b.store;const p=el("span","price",aed(b.price));if(b.was)p.appendChild(el("s",null,Number(b.was).toFixed(2)));h.appendChild(p)}
     li.appendChild(h);
     if(b){
-      const place=x=>x.nearBranch||(x.branches||[]).slice(0,2).join(", ")+((!x.nearBranch&&(x.branches||[]).length>2)?" +"+(x.branches.length-2)+" more":"");
-      const winRow=(medal,x,showPrice)=>{const r=el("div","win-row");const top=el("div");top.appendChild(el("span","medal",medal));top.appendChild(el("span","shop",x.store));
-        if(x.near)top.appendChild(el("span","near","Near you"));if(showPrice){const pr=el("span","price2",aed(x.price));if(x.was)pr.appendChild(el("s",null,Number(x.was).toFixed(2)));top.appendChild(pr)}r.appendChild(top);
-        const meta=[x.product,x.ends?"Ends "+x.ends:""].filter(Boolean).join(" · ");if(meta)r.appendChild(el("div","where",meta));
-        const pl=place(x);if(pl)r.appendChild(el("div","where","📍 "+pl));return r};
-      li.appendChild(winRow("🥇 1st",b,false));
-      const second=o[1];
-      if(second)li.appendChild(winRow("🥈 2nd",second,true));
-      const nb=o.find(x=>x.near&&x!==b&&x!==second);
-      if(!b.near&&!(second&&second.near)&&nb)li.appendChild(el("div","alt","Cheapest near you: "+nb.store+" "+aed(nb.price)+" ("+nb.nearBranch+")"));
-      const others=o.slice(2).filter(x=>x!==nb).slice(0,3);
-      if(others.length)li.appendChild(el("div","alt","Also: "+others.map(x=>x.store+" "+aed(x.price)).join(", ")));
-      li.appendChild(openLink(b.url));
+      const pl=b.nearBranch||(b.branches||[]).slice(0,2).join(", ")+((!b.nearBranch&&(b.branches||[]).length>2)?" +"+(b.branches.length-2)+" more":"");
+      const r=el("div","win-row");const top=el("div");top.appendChild(el("span","medal","Cheapest at"));top.appendChild(el("span","shop",b.store));
+      if(b.near)top.appendChild(el("span","near","Near you"));r.appendChild(top);
+      if(pl)r.appendChild(el("div","where","📍 "+pl));
+      const meta=[b.product,b.ends?"Ends "+b.ends:""].filter(Boolean).join(" · ");if(meta)r.appendChild(el("div","where",meta));
+      li.appendChild(r);li.appendChild(openLink(b.url));
     }else li.appendChild(el("div","none",it.error?"Couldn't check this item. Try again.":"No offer found this week."));
     ul.appendChild(li);
   });
@@ -357,10 +352,14 @@ function render(){
   const shops=Object.values(S).map(s=>({...s,count:Object.keys(s.items).length,sum:Object.values(s.items).reduce((a,b)=>a+b,0)}))
     .sort((a,b)=>b.count-a.count||(b.near-a.near)||a.sum-b.sum).slice(0,15);
   if(shops.length){
-    const top=shops[0];const c=el("div","best");c.appendChild(el("span","k","🥇 Best one-stop shop"));c.appendChild(el("span","s",top.store));
-    c.appendChild(el("span",null,"Has "+top.count+" of your "+total+" items on offer"+(top.near?" · 📍 "+top.nb:"")));
-    const sec=shops[1];if(sec){c.appendChild(el("span","k2","🥈 2nd: "+sec.store+" · "+sec.count+" of "+total+" items"+(sec.near?" · 📍 "+sec.nb:"")))}
-    best.appendChild(c);
+    const card=(x,label,cls)=>{const c=el("div",cls);c.appendChild(el("span","k",label));c.appendChild(el("span","s",x.store));
+      c.appendChild(el("span",null,x.count+" of your "+total+" items on offer · Total "+aed(x.sum)));
+      if(x.nb)c.appendChild(el("span",null,"📍 "+x.nb));
+      const wins=Object.keys(x.items).filter(k=>winners[k]===x.store);
+      if(wins.length)c.appendChild(el("span","wins","★ Cheapest for: "+wins.join(", ")));
+      return c};
+    best.appendChild(card(shops[0],"🥇 Best one-stop shop","best"));
+    if(shops[1])best.appendChild(card(shops[1],"🥈 2nd best one-stop shop","best second"));
   }
   shops.forEach((s,i)=>{
     const li=el("li");const d=el("details","shopc");const sm=el("summary");
