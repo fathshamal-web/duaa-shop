@@ -68,6 +68,10 @@ details.shopc summary::-webkit-details-marker{display:none}
 .price2 s{font-family:var(--body);font-weight:400;font-size:.78rem;color:var(--muted);margin-left:4px}
 .best.second{background:var(--card);color:var(--fg);border:2px solid var(--hi);margin-top:8px}
 .best .wins{font-size:.85rem;font-weight:700;margin-top:4px}
+button.dir{background:var(--tag);color:var(--tag-fg);border-color:var(--tag);padding:9px 14px;font-size:.95rem;align-self:flex-start;margin-top:6px}
+.links{display:flex;gap:14px;align-items:center;margin-top:4px}
+.links button.dir{margin-top:0;padding:6px 10px;font-size:.85rem}
+.best .where2{font-size:.85rem;margin-top:4px}
 .best .k2{font-size:.9rem;font-weight:700;margin-top:6px;padding-top:6px;border-top:1px solid rgba(0,0,0,.15)}
 .empty{color:var(--muted);text-align:center;padding:18px;border:1px dashed var(--line);border-radius:10px}
 </style>
@@ -320,6 +324,12 @@ function aed(n){return n==null?"":"AED "+Number(n).toFixed(2)}
 function el(tag,cls,text){const e=document.createElement(tag);if(cls)e.className=cls;if(text!=null)e.textContent=text;return e}
 function openLink(url){const a=el("a","open","See offer ›");a.href="#";a.onclick=e=>{e.preventDefault();window.Native&&window.Native.openUrl(url)};return a}
 
+function mapsUrl(store,branch){
+  const L=st.last||{};const parts=[store,branch||L.area||"",L.emirate||st.emirate,"UAE"].filter(Boolean);
+  return "https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(parts.join(" "));
+}
+function dirBtn(store,branch,label){const b=el("button","dir",label||"📍 Directions");
+  b.onclick=e=>{e.preventDefault();e.stopPropagation();window.Native&&window.Native.openUrl(mapsUrl(store,branch))};return b}
 function render(){
   const L=st.last;const ul=$("results"),sh=$("shops"),best=$("best");ul.textContent="";sh.textContent="";best.textContent="";
   $("itemsHead").hidden=$("shopsHead").hidden=!L;
@@ -340,7 +350,8 @@ function render(){
       if(b.near)top.appendChild(el("span","near","Near you"));r.appendChild(top);
       if(pl)r.appendChild(el("div","where","📍 "+pl));
       const meta=[b.product,b.ends?"Ends "+b.ends:""].filter(Boolean).join(" · ");if(meta)r.appendChild(el("div","where",meta));
-      li.appendChild(r);li.appendChild(openLink(b.url));
+      li.appendChild(r);
+      const links=el("div","links");links.appendChild(dirBtn(b.store,b.nearBranch||(b.branches||[])[0]||"","📍 Map"));links.appendChild(openLink(b.url));li.appendChild(links);
     }else li.appendChild(el("div","none",it.error?"Couldn't check this item. Try again.":"No offer found this week."));
     ul.appendChild(li);
   });
@@ -357,6 +368,9 @@ function render(){
       if(x.nb)c.appendChild(el("span",null,"📍 "+x.nb));
       const wins=Object.keys(x.items).filter(k=>winners[k]===x.store);
       if(wins.length)c.appendChild(el("span","wins","★ Cheapest for: "+wins.join(", ")));
+      const place=x.nb||"";
+      c.appendChild(el("span","where2",place?"Go to: "+x.store+", "+place:"Opens the nearest "+x.store+" in Google Maps"));
+      c.appendChild(dirBtn(x.store,place));
       return c};
     best.appendChild(card(shops[0],"🥇 Best one-stop shop","best"));
     if(shops[1])best.appendChild(card(shops[1],"🥈 2nd best one-stop shop","best second"));
