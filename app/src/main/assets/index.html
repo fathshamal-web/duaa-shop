@@ -195,11 +195,18 @@ const ML={
 const MULTI={
  "ghee rice":{label:"ghee rice (jeerakasala / kaima)",qs:["jeerakasala","kaima rice","ghee rice"],groups:[["jeerakasala"],["kaima"],["ghee","rice"],["jeera","rice"],["jeerakashala"]]},
  "neychor ari":"ghee rice","neychoru ari":"ghee rice","neichor ari":"ghee rice","ney choru ari":"ghee rice","neychor":"ghee rice","jeerakasala rice":"ghee rice","kaima rice":"ghee rice",
+ "fresh chicken":{label:"fresh chicken",qs:["fresh chicken","whole chicken"],groups:[["chicken","fresh"],["chicken","طازج"],["دجاج","طازج"]],exclude:["frozen","froz","prozen","مجمد","farm fresh","griller","grill(ed)?\\b","bbq","roast","cooked","shawarma","breast","wings?\\b","legs?\\b","thigh","drumstick","fillet","boneless","tender","mince","صدر","أفخاذ","اجنحة"]},
+ "kozhi":"fresh chicken","kozhi irachi":"fresh chicken","fresh kozhi":"fresh chicken","chicken fresh":"fresh chicken","fresh whole chicken":"fresh chicken",
+ "frozen chicken":{label:"frozen chicken (whole / griller)",qs:["frozen chicken","chicken griller","whole chicken"],groups:[["chicken","frozen"],["chicken","griller"],["chicken","مجمد"],["whole","chicken"]],exclude:["fresh whole chicken","طازج","grilled","bbq"]},
+ "chicken griller":"frozen chicken",
  "matta rice":{label:"matta rice",qs:["matta rice","red rice"],groups:[["matta"],["red","rice"],["rosematta"]]},
  "dosa batter":{label:"dosa batter",qs:["dosa batter","idly dosa batter"],groups:[["dosa"],["idly","batter"],["idli","batter"]]}
 };
 // Words that mark a different kind of product (hair care, snacks) unless the user asked for them
 const NOISE=["shampoo","hair","rosemary","conditioner","serum","lotion","chips","crisps","flavour","flavor","noodle","biscuit","cake","juice"];
+// Processed products that share a word with raw meat ("chicken franks"); skipped unless the user typed that word
+const PROCESSED=["fran\\s?ks?","nugg","frank","nugget","burger","liver","feet","sausage","breaded","shawarma","bites","popcorn","strips","stock","soup","noodle","mortadella","luncheon","kebab","kabab","kofta","cube","seasoning","masala","spice","bouillon","cheese","chips","samosa","spring roll","nacho","crispy","marinated","salami","hot dog","pizza","sandwich","wrap","cat food","dog food","pate","paste","flavour","flavor","franks","sheesh","tikka","lollipop","drumstick","gizzard"];
+const MEATS=["chicken","beef","mutton","lamb","fish","meat","prawn","shrimp","دجاج"];
 const SIZE_RE=/\b(\d+(?:\.\d+)?)\s*(kg|kgs|kilo|g|gm|gms|gram|grams|l|ltr|litre|liter|ml|pcs|pc|pieces|nos)\b/i;
 function sizeOf(text){const m=String(text).match(SIZE_RE);if(!m)return null;
   let u=m[2].toLowerCase();u=/^k/.test(u)?"kg":/^(g|gm|gms|gram|grams)$/.test(u)?"g":/^(l|ltr|litre|liter)$/.test(u)?"l":u==="ml"?"ml":"pcs";
@@ -213,15 +220,18 @@ function translate(raw){
   const size=sizeOf(low);
   const k=low.replace(SIZE_RE,"").replace(/\s+/g," ").trim()||low;
   let mm=MULTI[k];if(typeof mm==="string")mm=MULTI[mm];
-  if(mm)return {input,q:mm.label,qs:mm.qs,groups:mm.groups,size};
+  if(mm)return {input,q:mm.label,qs:mm.qs,groups:mm.groups,exclude:mm.exclude,size};
   if(ML[k]){let m2=MULTI[ML[k][0]];if(typeof m2==="string")m2=MULTI[m2];
-    if(m2)return {input,q:m2.label,qs:m2.qs,groups:m2.groups,size};
+    if(m2)return {input,q:m2.label,qs:m2.qs,groups:m2.groups,exclude:m2.exclude,size};
     return {input,q:ML[k][0],qs:[ML[k][0]],groups:ML[k][1].map(p=>p.split(" ")),size}}
   // free text: translate any Malayalam words, then every word must appear in the offer
   const words=k.split(/\s+/).map(w=>ML[w]?ML[w][0]:w).join(" ").split(/\s+/)
     .filter(w=>w.length>=2&&!/^\d/.test(w)&&!["pcs","pack","of","the","and","fresh"].includes(w));
+  const isMeat=MEATS.some(m=>k.includes(m));
+  if(isMeat&&/\bfresh\b/.test(k)&&!words.includes("fresh"))words.push("fresh");
   const group=words.length?words.map(w=>w.length>3?w.replace(/(es|s)$/,""):w):[k];
-  return {input,q:words.join(" ")||k,qs:[words.join(" ")||k],groups:[group],size};
+  const exclude=isMeat&&/\bfresh\b/.test(k)?["frozen","مجمد","farm fresh"]:undefined;
+  return {input,q:words.join(" ")||k,qs:[words.join(" ")||k],groups:[group],exclude,size};
 }
 
 
@@ -372,6 +382,8 @@ async function checkItem(t,slug){
   const groups=t.groups.map(g=>g.map(w=>new RegExp("(^|[^a-z])"+esc(w),"i")));
   const near=nearKw(), now=Date.now();
   const qtext=(t.input+" "+t.qs.join(" ")).toLowerCase();
+  const exRe=(t.exclude||[]).map(w=>new RegExp(w,"i"));
+  const meatQ=MEATS.some(m=>qtext.includes(m));
   const byStore={};const byStoreAny={};
   raw.forEach(x=>{
     const price=parseFloat(x.price);if(!(price>0&&price<5000))return;
@@ -379,6 +391,8 @@ async function checkItem(t,slug){
     const desc=String(x.description||"");
     if(!groups.some(g=>g.every(r=>r.test(desc))))return;
     if(NOISE.some(w=>!qtext.includes(w)&&new RegExp("(^|[^a-z])"+w,"i").test(desc)))return;
+    if(exRe.some(r=>r.test(desc)))return;
+    if(meatQ&&PROCESSED.some(w=>!qtext.includes(w)&&new RegExp("(^|[^a-z])"+w,"i").test(desc)))return;
     const store=niceStore(x.text_footer_en);
     const branches=pyList(x.company_branch);
     const nb=branches.find(b=>near.some(k=>b.toLowerCase().includes(k)));
