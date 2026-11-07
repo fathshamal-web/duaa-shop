@@ -87,12 +87,19 @@ button.dir{background:var(--tag);color:var(--tag-fg);border-color:var(--tag);pad
 .best .far{font-size:.86rem;font-weight:700;color:var(--tag);margin-top:4px}
 .best.second .far{color:var(--tag)}
 .best .k2{font-size:.9rem;font-weight:700;margin-top:6px;padding-top:6px;border-top:1px solid rgba(0,0,0,.15)}
+.upd{background:var(--ok);color:#fff;border-radius:10px;padding:12px 14px;display:flex;gap:12px;align-items:center}
+.upd div{flex:1;min-width:0;display:flex;flex-direction:column;font-size:.9rem}
+.upd button{background:#fff;color:var(--ok);border-color:#fff}
 .empty{color:var(--muted);text-align:center;padding:18px;border:1px dashed var(--line);border-radius:10px}
 </style>
 </head>
 <body>
 <div class="top"><b>Duaa Shop</b><span>Cheapest grocery offers near you</span></div>
 <div class="wrap">
+  <div class="upd" id="upd" hidden>
+    <div><b id="updTitle">New version available</b><span id="updText"></span></div>
+    <button id="updBtn">Update now</button>
+  </div>
 
   <section class="panel">
     <div class="locrow">
@@ -127,6 +134,7 @@ button.dir{background:var(--tag);color:var(--tag-fg);border-color:var(--tag);pad
     <ul id="results"></ul>
     <h2 id="shopsHead" hidden>Shops with the most of your items</h2>
     <ul id="shops"></ul>
+    <p class="note" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span id="verText"></span><button id="updCheck" style="font-size:.8rem;padding:5px 10px">Check for updates</button></p>
     <p class="note">Prices from D4D Online store brochures. D4D marks its prices as AI-read from flyers; the brochure price wins if it differs. Check pack sizes on the shelf.</p>
   </section>
 </div>
@@ -516,6 +524,33 @@ function render(){
     d.appendChild(pl);li.appendChild(d);sh.appendChild(li);
   });
 }
+// ---------- Self-update ----------
+function nativeCall(fn){return new Promise((res,rej)=>{const id="u"+(++seq);pending[id]={res,rej};fn(id)})}
+let latest=null;
+async function checkUpdate(manual){
+  if(!window.Native||!window.Native.checkUpdate){return}
+  const mine=window.Native.version();
+  $("verText").textContent="Duaa Shop version code "+mine;
+  try{
+    latest=JSON.parse(await nativeCall(id=>window.Native.checkUpdate(id)));
+    if(latest.versionCode>mine){
+      $("upd").hidden=false;$("updTitle").textContent="New version "+latest.versionName+" available";
+      $("updText").textContent=latest.notes||"Tap Update now. It installs over this version and keeps your list and history.";
+    }else if(manual){$("upd").hidden=true;$("verText").textContent="You have the latest version ("+(latest.versionName||mine)+")."}
+  }catch(e){if(manual)$("verText").textContent="Couldn't check for updates. Check your internet."}
+}
+$("updCheck").onclick=()=>checkUpdate(true);
+$("updBtn").onclick=async()=>{
+  $("updBtn").disabled=true;$("updText").textContent="Downloading the update…";
+  try{await nativeCall(id=>window.Native.installUpdate(id));$("updText").textContent="Installed. Reopening…"}
+  catch(e){const m=String(e&&e.message||"");
+    if(m==="need_permission")$("updText").textContent="Allow \"Install unknown apps\" for Duaa Shop in the screen that opened, then come back and tap Update now again.";
+    else if(/conflict|signature|INCOMPATIBLE|-7|\(4\)|\(5\)/i.test(m))$("updText").textContent="This one time, uninstall Duaa Shop and install the new version from GitHub. After that, updates install here automatically.";
+    else $("updText").textContent="Update didn't finish ("+m+"). Try again.";}
+  finally{$("updBtn").disabled=false}
+};
+setTimeout(()=>checkUpdate(false),1500);
+
 renderLoc();renderHistory();render();
 </script>
 </body>

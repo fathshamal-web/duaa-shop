@@ -17,8 +17,27 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
+      - name: Prepare signing key
+        env:
+          KS_B64: ${{ secrets.DUAA_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KS_B64" ]; then
+            echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/duaa.jks"
+            echo "DUAA_KEYSTORE=$RUNNER_TEMP/duaa.jks" >> "$GITHUB_ENV"
+          else
+            echo "::warning::No DUAA_KEYSTORE_B64 secret; building with a temporary key (updates won't install over the old app)"
+          fi
       - name: Build APK
+        env:
+          DUAA_KS_PASS: ${{ secrets.DUAA_KS_PASS }}
         run: gradle assembleDebug --no-daemon
+      - name: Write version.json
+        run: |
+          VC=$(grep -oP 'versionCode \K[0-9]+' app/build.gradle)
+          VN=$(grep -oP 'versionName "\K[^"]+' app/build.gradle)
+          MSG=$(git log -1 --format=%s | sed 's/"/\\"/g')
+          printf '{"versionCode":%s,"versionName":"%s","notes":"%s"}' "$VC" "$VN" "$MSG" > version.json
+          cat version.json
       - name: Rename APK
         run: cp app/build/outputs/apk/debug/app-debug.apk DuaaShop.apk
       - uses: actions/upload-artifact@v4
@@ -30,4 +49,4 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release delete latest --yes --cleanup-tag || true
-          gh release create latest DuaaShop.apk --title "Duaa Shop (latest)" --notes "Download DuaaShop.apk on your Android phone and open it to install. Built from commit ${GITHUB_SHA::7}."
+          gh release create latest DuaaShop.apk version.json --title "Duaa Shop (latest)" --notes "Download DuaaShop.apk on your Android phone and open it to install. Built from commit ${GITHUB_SHA::7}."

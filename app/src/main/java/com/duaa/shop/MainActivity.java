@@ -59,6 +59,9 @@ public class MainActivity extends Activity {
                 }
             }
         });
+        android.content.IntentFilter f = new android.content.IntentFilter(ACTION_INSTALL);
+        if (Build.VERSION.SDK_INT >= 33) registerReceiver(installReceiver, f, android.content.Context.RECEIVER_NOT_EXPORTED);
+        else registerReceiver(installReceiver, f);
         web.loadUrl("file:///android_asset/index.html");
     }
 
@@ -123,6 +126,94 @@ public class MainActivity extends Activity {
 
     private void sendLoc(String id, android.location.Location l) {
         deliver(id, true, "{\"lat\":" + l.getLatitude() + ",\"lon\":" + l.getLongitude() + "}");
+    }
+
+    // ---------- Self-update from GitHub Releases ----------
+    private static final String REL = "https://github.com/fathshamal-web/duaa-shop/releases/download/latest/";
+    private static final String ACTION_INSTALL = "com.duaa.shop.INSTALL_STATUS";
+    private String installId;
+    private final android.content.BroadcastReceiver installReceiver = new android.content.BroadcastReceiver() {
+        @Override public void onReceive(android.content.Context ctx, Intent intent) {
+            int status = intent.getIntExtra(android.content.pm.PackageInstaller.EXTRA_STATUS, -999);
+            if (status == android.content.pm.PackageInstaller.STATUS_PENDING_USER_ACTION) {
+                Intent confirm = intent.getParcelableExtra(Intent.EXTRA_INTENT);
+                if (confirm != null) { confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(confirm); }
+                return;
+            }
+            String id = installId; installId = null;
+            if (id == null) return;
+            if (status == android.content.pm.PackageInstaller.STATUS_SUCCESS) deliver(id, true, "ok");
+            else deliver(id, false, String.valueOf(intent.getStringExtra(android.content.pm.PackageInstaller.EXTRA_STATUS_MESSAGE)) + " (" + status + ")");
+        }
+    };
+
+    private int myVersion() {
+        try { return getPackageManager().getPackageInfo(getPackageName(), 0).versionCode; } catch (Exception e) { return 0; }
+    }
+
+    private HttpURLConnection openGithub(String url) throws Exception {
+        URL u = new URL(url);
+        HttpURLConnection c = null;
+        for (int i = 0; i < 6; i++) {
+            if (!"https".equals(u.getProtocol())) throw new Exception("https only");
+            String h = u.getHost();
+            if (!(h.equals("github.com") || h.endsWith(".githubusercontent.com"))) throw new Exception("host not allowed: " + h);
+            c = (HttpURLConnection) u.openConnection();
+            c.setInstanceFollowRedirects(false);
+            c.setConnectTimeout(15000);
+            c.setReadTimeout(30000);
+            c.setRequestProperty("User-Agent", "DuaaShop-updater");
+            int code = c.getResponseCode();
+            if (code >= 300 && code < 400) { String loc = c.getHeaderField("Location"); c.disconnect(); u = new URL(u, loc); continue; }
+            if (code >= 400) throw new Exception("HTTP " + code);
+            return c;
+        }
+        throw new Exception("too many redirects");
+    }
+
+    private void doInstall(final String id) {
+        pool.execute(() -> {
+            HttpURLConnection c = null;
+            android.content.pm.PackageInstaller.Session session = null;
+            try {
+                android.content.pm.PackageInstaller pi = getPackageManager().getPackageInstaller();
+                android.content.pm.PackageInstaller.SessionParams params =
+                        new android.content.pm.PackageInstaller.SessionParams(android.content.pm.PackageInstaller.SessionParams.MODE_FULL_INSTALL);
+                params.setAppPackageName(getPackageName());
+                int sid = pi.createSession(params);
+                session = pi.openSession(sid);
+                c = openGithub(REL + "DuaaShop.apk");
+                long len = c.getContentLengthLong();
+                try (java.io.InputStream in = c.getInputStream(); java.io.OutputStream out = session.openWrite("DuaaShop.apk", 0, len)) {
+                    byte[] buf = new byte[65536]; int n;
+                    while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+                    session.fsync(out);
+                }
+                Intent i = new Intent(ACTION_INSTALL).setPackage(getPackageName());
+                int flags = PendingIntent_FLAGS();
+                android.app.PendingIntent pIntent = android.app.PendingIntent.getBroadcast(this, sid, i, flags);
+                installId = id;
+                session.commit(pIntent.getIntentSender());
+                session.close();
+            } catch (Exception e) {
+                if (session != null) session.abandon();
+                deliver(id, false, String.valueOf(e.getMessage()));
+            } finally {
+                if (c != null) c.disconnect();
+            }
+        });
+    }
+
+    private static int PendingIntent_FLAGS() {
+        int f = android.app.PendingIntent.FLAG_UPDATE_CURRENT;
+        if (Build.VERSION.SDK_INT >= 31) f |= android.app.PendingIntent.FLAG_MUTABLE;
+        return f;
+    }
+
+    @Override
+    protected void onDestroy() {
+        try { unregisterReceiver(installReceiver); } catch (Exception ignored) {}
+        super.onDestroy();
     }
 
     @Override
@@ -193,6 +284,40 @@ public class MainActivity extends Activity {
                 } finally {
                     if (c != null) c.disconnect();
                 }
+            });
+        }
+
+        @JavascriptInterface
+        public int version() { return myVersion(); }
+
+        /** Reads version.json from the latest GitHub release: {"versionCode":..,"versionName":"..","notes":".."} */
+        @JavascriptInterface
+        public void checkUpdate(final String id) {
+            pool.execute(() -> {
+                HttpURLConnection c = null;
+                try {
+                    c = openGithub(REL + "version.json");
+                    BufferedReader r = new BufferedReader(new InputStreamReader(c.getInputStream(), StandardCharsets.UTF_8));
+                    StringBuilder sb = new StringBuilder(); String line;
+                    while ((line = r.readLine()) != null) sb.append(line);
+                    r.close();
+                    deliver(id, true, sb.toString());
+                } catch (Exception e) {
+                    deliver(id, false, String.valueOf(e.getMessage()));
+                } finally { if (c != null) c.disconnect(); }
+            });
+        }
+
+        @JavascriptInterface
+        public void installUpdate(final String id) {
+            runOnUiThread(() -> {
+                if (Build.VERSION.SDK_INT >= 26 && !getPackageManager().canRequestPackageInstalls()) {
+                    startActivity(new Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                            Uri.parse("package:" + getPackageName())));
+                    deliver(id, false, "need_permission");
+                    return;
+                }
+                doInstall(id);
             });
         }
 

@@ -6,8 +6,24 @@ android {
         applicationId "com.duaa.shop"
         minSdk 24
         targetSdk 34
-        versionCode 13
-        versionName "2.2"
+        versionCode 14
+        versionName "2.3"
+    }
+    signingConfigs {
+        duaa {
+            def ks = System.getenv("DUAA_KEYSTORE")
+            if (ks) {
+                storeFile file(ks)
+                storePassword System.getenv("DUAA_KS_PASS")
+                keyAlias "duaa"
+                keyPassword System.getenv("DUAA_KS_PASS")
+            }
+        }
+    }
+    buildTypes {
+        debug {
+            if (System.getenv("DUAA_KEYSTORE")) signingConfig signingConfigs.duaa
+        }
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
