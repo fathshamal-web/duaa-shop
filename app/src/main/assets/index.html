@@ -108,6 +108,9 @@ button.dir{background:var(--tag);color:var(--tag-fg);border-color:var(--tag);pad
 .viewer img{width:100%;height:auto;display:block}
 .dist2{font-size:.88rem;font-weight:700;color:var(--ok)}
 .packline{font-size:.86rem;font-weight:600}
+.pick{border-top:1px dashed var(--line);padding-top:8px;display:flex;flex-direction:column;gap:6px}
+.pickh{font-size:.86rem;font-weight:700}
+.pick input,.pick select{font:inherit;font-size:.9rem;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px;width:100%}
 .empty{color:var(--muted);text-align:center;padding:18px;border:1px dashed var(--line);border-radius:10px}
 </style>
 </head>
@@ -513,7 +516,7 @@ async function checkItem(t,slug){
   const qtext=(t.input+" "+t.qs.join(" ")).toLowerCase();
   const exRe=(t.exclude||[]).map(w=>new RegExp(w,"i"));
   const meatQ=MEATS.some(m=>qtext.includes(m));
-  const byStore={};const byStoreAny={};
+  const cands=[];
   raw.forEach(x=>{
     const price=parseFloat(x.price);if(!(price>0&&price<5000))return;
     const vt=Date.parse(String(x.valid_to||"").replace(" ","T")+"+04:00");if(vt&&vt<now)return;
@@ -527,20 +530,45 @@ async function checkItem(t,slug){
     const nb=branches.find(b=>near.some(k=>b.toLowerCase().includes(k)));
     const was=parseFloat(x.was_price);
     const o={store,price,was:was>price?was:null,product:cleanDesc(desc,store),ends:endDate(x.valid_to),
-      branches,nearBranch:nb||"",near:!!nb,url:x.url||"",src:x.src||"d4d"};
-    const un=unitOf(desc);if(un)o.unit={...un,up:price/un.qty};
-    const put=(map)=>{const cur=map[store];if(!cur||(o.near&&!cur.near)||(o.near===cur.near&&cmpOffer(o,cur)<0))map[store]=o};
-    put(byStoreAny);if(sizeMatches(desc,t.size))put(byStore);
+      branches,nearBranch:nb||"",near:!!nb,url:x.url||"",src:x.src||"d4d",sizeOk:sizeMatches(desc,t.size)};
+    const un=unitOf(desc);if(un)o.u0={...un,up:price/un.qty};
+    cands.push(o);
   });
-  const sized=Object.values(byStore);
-  let offers=(t.size&&sized.length?sized:Object.values(byStoreAny));
-  // rank by price per kg / litre / piece when sizes are known; offers without a size go after
+  const offers=reduceOffers(cands,t);
+  cands.sort((a,b)=>cmpOffer({unit:a.u0,price:a.price},{unit:b.u0,price:b.price}));
+  return {...t,offers,cands:cands.slice(0,120),found:raw.length,brochures:await broP};
+}
+// best offer per shop, ranked by price per kg / litre / piece when sizes are known (offers without a size go after)
+function reduceOffers(list,t){
+  const sizedOk=t.size&&list.some(o=>o.sizeOk);
+  const by={};
+  list.forEach(c=>{if(sizedOk&&!c.sizeOk)return;const o={...c};if(o.u0)o.unit={...o.u0};else delete o.unit;
+    const cur=by[o.store];if(!cur||(o.near&&!cur.near)||(o.near===cur.near&&cmpOffer(o,cur)<0))by[o.store]=o});
+  const offers=Object.values(by);
   const cnt={};offers.forEach(o=>{if(o.unit)cnt[o.unit.per]=(cnt[o.unit.per]||0)+1});
   const dom=Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a])[0];
   offers.forEach(o=>{if(o.unit&&o.unit.per!==dom){o.altUnit=o.unit;delete o.unit}});
   offers.sort(cmpOffer);
-  if(t.size&&!sized.length&&offers.length)offers.forEach(o=>o.sizeNote="Size "+t.size.n+t.size.u+" not confirmed");
-  return {...t,offers,found:raw.length,brochures:await broP};
+  if(t.size&&!sizedOk&&offers.length)offers.forEach(o=>o.sizeNote="Size "+t.size.n+t.size.u+" not confirmed");
+  return offers;
+}
+// group the matching products so the user can pick the exact one ("Crystal sunflower oil · 1.5 L")
+function productKey(c){return c.product.toLowerCase().replace(/[^a-z؀-ۿ ]/g," ").replace(/\b(fresh|pack|value|offer|special|each|only|was|now|ltr|kg|gm|ml|pcs)\b/g," ").replace(/\s+/g," ").trim().split(" ").slice(0,5).join(" ")+"|"+(c.u0?qtyText(c.u0):"")}
+function productGroups(cands){
+  const g={};(cands||[]).forEach(c=>{const k=productKey(c);if(!k||k.startsWith("|"))return;
+    const e=g[k]||(g[k]={key:k,label:"",shops:new Set(),min:Infinity,best:null});e.shops.add(c.store);
+    const v=c.u0?c.u0.up:c.price;if(v<e.min){e.min=v;e.best=c}});
+  return Object.values(g).map(e=>({key:e.key,shops:e.shops.size,best:e.best,
+    label:e.best.product.replace(/\b(ltr|ltrs|lt|ml|gm|gms|kg|kgs|pcs|g)\b/gi,"").replace(/\s+/g," ").trim()+(e.best.u0?" · "+qtyText(e.best.u0):"")+" · "+e.shops.size+" shop"+(e.shops.size>1?"s":"")}))
+    .sort((a,b)=>b.shops-a.shops||(a.best.price-b.best.price));
+}
+function isDoubtful(it){const gs=productGroups(it.cands);const top=it.offers&&it.offers[0];
+  return gs.length>=3||(top&&!top.unit)||(top&&top.sizeNote)}
+function applyPick(idx,key){
+  const it=st.last.items[idx];if(!it)return;
+  it.offers=reduceOffers(key?it.cands.filter(c=>productKey(c)===key):it.cands,it);
+  it.picked=key?(productGroups(it.cands).find(g=>g.key===key)||{}).label||"":"";
+  save();render();
 }
 
 // ---------- Run ----------
@@ -557,7 +585,8 @@ $("go").onclick=async()=>{
   const res=await limit(3,ts.map(t=>async()=>{let r;try{r=await checkItem(t,slug)}catch(e){r={...t,offers:[],error:e.message}}done++;tick();return r}));
   for(let i=0;i<res.length;i++)if(res[i]&&res[i].error){$("status").textContent="Re-checking "+res[i].input+"…";try{res[i]=await checkItem(ts[i],slug)}catch(e){}}
   st.last={at:new Date().toISOString(),emirate:st.emirate,area:st.area,items:res,list:list.join(", ")};
-  st.history=[st.last].concat((st.history||[]).filter(h=>h.list!==st.last.list||h.area!==st.last.area)).slice(0,10);
+  const slim={...st.last,items:st.last.items.map(({cands,...rest})=>rest)};
+  st.history=[slim].concat((st.history||[]).filter(h=>h.list!==st.last.list||h.area!==st.last.area)).slice(0,10);
   save();renderHistory();
   $("go").disabled=false;$("progBox").hidden=true;render();
 };
@@ -687,6 +716,16 @@ function render(){
           r2.appendChild(el("div","dist2","📍 "+alt.n.branch+" · "+kmText(alt.n.km,alt.n.src)));li.appendChild(r2);
           const l2=el("div","links");l2.appendChild(dirBtn(alt.o.store,alt.n.branch,"📍 Go"));li.appendChild(l2)}}
     }
+    if(it.cands&&it.cands.length&&(isDoubtful(it)||it.picked)){
+      const idx=L.items.indexOf(it);const gs=productGroups(it.cands);
+      const box=el("div","pick");
+      box.appendChild(el("div","pickh",it.picked?"✅ Showing only: "+it.picked:"🤔 Not sure this is the right product? Choose the exact one:"));
+      const inp=document.createElement("input");inp.type="search";inp.placeholder="Type brand or size, e.g. crystal, 1.5";inp.id="pickq"+idx;
+      const sel=document.createElement("select");sel.id="picks"+idx;
+      const fill=q=>{sel.textContent="";const o0=document.createElement("option");o0.value="";o0.textContent="All matching products ("+gs.length+")";sel.appendChild(o0);
+        gs.filter(g=>!q||g.label.toLowerCase().includes(q.toLowerCase())).slice(0,40).forEach(g=>{const op=document.createElement("option");op.value=g.key;op.textContent=g.label;if(it.picked===g.label)op.selected=true;sel.appendChild(op)})};
+      fill("");inp.oninput=()=>fill(inp.value.trim());sel.onchange=()=>applyPick(idx,sel.value);
+      box.appendChild(inp);box.appendChild(sel);li.appendChild(box)}
     if(it.brochures&&it.brochures.length){li.appendChild(el("div","where","📄 Also in these brochures (tap to see the price):"));const row=el("div","bro");
       it.brochures.forEach(x=>{const b=el("button");const im=el("img");im.src=x.thumb;im.alt=x.shop+" page "+x.page;im.loading="lazy";b.appendChild(im);
         b.appendChild(el("span",null,x.shop+(x.page?" p."+x.page:"")));b.onclick=()=>openViewer(x);row.appendChild(b)});li.appendChild(row)}
