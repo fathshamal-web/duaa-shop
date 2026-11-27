@@ -407,13 +407,23 @@ async function kimbino(q){
     if(end&&Date.parse(end)<Date.now())return;
     const key=shop+page+href;if(seen.has(key)||!img)return;seen.add(key);
     out.push({shop:shop.trim(),page,url:new URL(href,"https://www.kimbino.ae").href,thumb:img.getAttribute("src"),
-      big:img.getAttribute("src").replace(/full-fit-in\/\d+x\d+/,"full-fit-in/1200x0").replace(/quality\(\d+\)/,"quality(80)"),
+      file:(img.getAttribute("src").match(/\/ae\/data\/\d+\/\d+\/\d+\.jpg/)||[""])[0],
       ends:end?new Date(end).toLocaleDateString("en-GB",{day:"numeric",month:"short"}):""});
   });
   return out.slice(0,8);
 }
 let vUrl="";
-function openViewer(b){$("vTitle").textContent=b.shop+(b.page?" · page "+b.page:"")+(b.ends?" · until "+b.ends:"");$("vImg").src=b.big;vUrl=b.url;$("viewer").hidden=false}
+async function openViewer(b){
+  $("vTitle").textContent=b.shop+(b.page?" · page "+b.page:"")+(b.ends?" · until "+b.ends:"")+" · loading…";
+  $("vImg").src=b.thumb;vUrl=b.url;$("viewer").hidden=false;
+  try{ // the brochure page carries a signed full-size picture of every page
+    const html=await get(b.url.split("#")[0]);
+    const esc=b.file.replace(/[.*+?^${}()|[\]\\\/]/g,"\\$&");
+    const m=html.match(new RegExp("https://eu\\.kimbicdn\\.com/thumbor/[^\"\\s\\\\]+?/0x0/[^\"\\s\\\\]*?"+esc))||html.match(new RegExp("https://eu\\.kimbicdn\\.com/thumbor/[^\"\\s\\\\]+?/full-fit-in/640x640/[^\"\\s\\\\]*?"+esc));
+    if(m&&!$("viewer").hidden){$("vImg").src=m[0]}
+  }catch(e){}
+  $("vTitle").textContent=b.shop+(b.page?" · page "+b.page:"")+(b.ends?" · until "+b.ends:"");
+}
 $("vClose").onclick=()=>{$("viewer").hidden=true;$("vImg").src=""};
 $("vOpen").onclick=()=>{if(vUrl&&window.Native)window.Native.openUrl(vUrl)};
 async function checkItem(t,slug){
