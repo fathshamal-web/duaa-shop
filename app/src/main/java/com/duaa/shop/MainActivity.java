@@ -235,8 +235,13 @@ public class MainActivity extends Activity {
 
     @Override
     public void onBackPressed() {
-        if (web.canGoBack()) web.goBack();
-        else super.onBackPressed();
+        // let the page close an open picture viewer first; otherwise leave the app as usual
+        web.evaluateJavascript("window.__back?window.__back():false", v -> {
+            if (!"true".equals(v)) {
+                if (web.canGoBack()) web.goBack();
+                else MainActivity.super.onBackPressed();
+            }
+        });
     }
 
     private void deliver(final String id, final boolean ok, final String body) {

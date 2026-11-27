@@ -14,6 +14,7 @@
   --bg:#141816; --card:#1c211e; --fg:#e9eee9; --muted:#9aa59f; --line:#2c332f;
   --tag:#ff5a4f; --tag-fg:#1a0d0c; --ok:#5fd39a; --warn:#f0b35a; color-scheme:dark}}
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--body);font-size:15px;line-height:1.45}
 .top{background:var(--tag);color:var(--tag-fg);padding:14px 16px}
 .top b{font-family:var(--display);font-weight:800;font-size:1.5rem;letter-spacing:.02em}
@@ -105,6 +106,7 @@ button.dir{background:var(--tag);color:var(--tag-fg);border-color:var(--tag);pad
 .viewer .vh{display:flex;gap:8px;align-items:center;color:#fff;font-size:.9rem}
 .viewer .vh span{flex:1;min-width:0}
 .viewer .vimg{flex:1;overflow:auto;margin-top:8px}
+.verr{color:#fff;font-size:.95rem;margin:16px 4px}
 .viewer img{width:100%;height:auto;display:block}
 .dist2{font-size:.88rem;font-weight:700;color:var(--ok)}
 .packline{font-size:.86rem;font-weight:600}
@@ -116,7 +118,7 @@ button.dir{background:var(--tag);color:var(--tag-fg);border-color:var(--tag);pad
 </head>
 <body>
 <div class="top"><b>Duaa Shop</b><span>Cheapest grocery offers near you</span></div>
-<div class="viewer" id="viewer" hidden><div class="vh"><span id="vTitle"></span><button id="vOpen">Open brochure</button><button id="vClose">Close</button></div><div class="vimg"><img id="vImg" alt="Brochure page"></div></div>
+<div class="viewer" id="viewer" hidden><div class="vh"><span id="vTitle"></span><button id="vOpen">Open brochure</button><button id="vClose">Close</button></div><div class="vimg"><img id="vImg" alt=""><p id="vErr" class="verr" hidden>Couldn't load this page picture. Tap Open brochure to see it on Kimbino.</p></div></div>
 <div class="wrap">
   <div class="upd" id="upd" hidden>
     <div><b id="updTitle">New version available</b><span id="updText"></span></div>
@@ -466,7 +468,11 @@ async function kimbino(q){
   return out.slice(0,8);
 }
 let vUrl="";
-async function openViewer(b){
+$("vImg").onerror=()=>{if($("vImg").getAttribute("src")){$("vImg").hidden=true;$("vErr").hidden=false}};
+$("vImg").onload=()=>{$("vImg").hidden=false;$("vErr").hidden=true};
+function closeViewer(){$("viewer").hidden=true;$("vImg").removeAttribute("src");$("vErr").hidden=true}
+window.__back=()=>{if(!$("viewer").hidden){closeViewer();return true}return false}; // Android Back closes the viewer first
+async function openViewer(b){$("vErr").hidden=true;$("vImg").hidden=false;
   $("vTitle").textContent=b.shop+(b.page?" · page "+b.page:"")+(b.ends?" · until "+b.ends:"")+" · loading…";
   $("vImg").src=b.thumb;vUrl=b.url;$("viewer").hidden=false;
   try{ // the brochure page carries a signed full-size picture of every page
@@ -477,7 +483,7 @@ async function openViewer(b){
   }catch(e){}
   $("vTitle").textContent=b.shop+(b.page?" · page "+b.page:"")+(b.ends?" · until "+b.ends:"");
 }
-$("vClose").onclick=()=>{$("viewer").hidden=true;$("vImg").src=""};
+$("vClose").onclick=closeViewer;
 $("vOpen").onclick=()=>{if(vUrl&&window.Native)window.Native.openUrl(vUrl)};
 // ---------- Official shelf prices: UAE Ministry of Economy & Tourism open data ----------
 const MOET_PAGE="https://www.moet.gov.ae/en/essential-goods-prices-platform";
@@ -740,7 +746,7 @@ function render(){
       fill("");inp.oninput=()=>fill(inp.value.trim());sel.onchange=()=>applyPick(idx,sel.value);
       box.appendChild(inp);box.appendChild(sel);li.appendChild(box)}
     if(it.brochures&&it.brochures.length){li.appendChild(el("div","where","📄 Also in these brochures (tap to see the price):"));const row=el("div","bro");
-      it.brochures.forEach(x=>{const b=el("button");const im=el("img");im.src=x.thumb;im.alt=x.shop+" page "+x.page;im.loading="lazy";b.appendChild(im);
+      it.brochures.forEach(x=>{const b=el("button");const im=el("img");im.onerror=()=>{b.hidden=true};im.src=x.thumb;im.alt=x.shop+" page "+x.page;im.loading="lazy";b.appendChild(im);
         b.appendChild(el("span",null,x.shop+(x.page?" p."+x.page:"")));b.onclick=()=>openViewer(x);row.appendChild(b)});li.appendChild(row)}
     if(!b)li.appendChild(el("div","none",it.error?"Couldn't check this item. Try again.":(it.brochures&&it.brochures.length?"No price listed on D4D. Check the brochure pages above.":"No offer found this week.")));
     ul.appendChild(li);
