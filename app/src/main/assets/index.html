@@ -107,6 +107,7 @@ button.dir{background:var(--tag);color:var(--tag-fg);border-color:var(--tag);pad
 .viewer .vimg{flex:1;overflow:auto;margin-top:8px}
 .viewer img{width:100%;height:auto;display:block}
 .dist2{font-size:.88rem;font-weight:700;color:var(--ok)}
+.packline{font-size:.86rem;font-weight:600}
 .empty{color:var(--muted);text-align:center;padding:18px;border:1px dashed var(--line);border-radius:10px}
 </style>
 </head>
@@ -231,6 +232,29 @@ const NOISE=["shampoo","hair","rosemary","conditioner","serum","lotion","chips",
 // Processed products that share a word with raw meat ("chicken franks"); skipped unless the user typed that word
 const PROCESSED=["fran\\s?ks?","nugg","frank","nugget","burger","liver","feet","sausage","breaded","shawarma","bites","popcorn","strips","stock","soup","noodle","mortadella","luncheon","kebab","kabab","kofta","cube","seasoning","masala","spice","bouillon","cheese","chips","samosa","spring roll","nacho","crispy","marinated","salami","hot dog","pizza","sandwich","wrap","cat food","dog food","pate","paste","flavour","flavor","franks","sheesh","tikka","lollipop","drumstick","gizzard"];
 const MEATS=["chicken","beef","mutton","lamb","fish","meat","prawn","shrimp","دجاج"];
+// ---------- Price per kg / litre / piece, so different pack sizes compare fairly ----------
+function unitOf(desc){
+  const d=String(desc||"").toLowerCase().replace(/(\d),(\d)/g,"$1.$2");
+  const W="(kg|kgs|kilo|g|gm|gms|grm|gram|grams|l|ltr|ltrs|litre|liter|lt|ml)";
+  let m=d.match(new RegExp("(\\d+)\\s*[x×]\\s*(\\d+(?:\\.\\d+)?)\\s*"+W+"(?![a-z])"));let n,u,mult=1;
+  if(m){mult=+m[1];n=+m[2];u=m[3]}else{m=d.match(new RegExp("(\\d+(?:\\.\\d+)?)\\s*"+W+"(?![a-z])"));if(m){n=+m[1];u=m[2]}}
+  let r=null;
+  const pk=d.match(/pack\s*of\s*(\d{1,2})|(\d{1,2})\s*(?:x\s*)?(?:packs|pack)\b/);if(n&&mult===1&&pk)mult=+(pk[1]||pk[2])||1;
+  if(n){if(/^k/.test(u))r={per:"kg",qty:n*mult};else if(/^(g|gm|gms|grm|gram|grams)$/.test(u))r={per:"kg",qty:n*mult/1000};
+    else if(u==="ml")r={per:"l",qty:n*mult/1000};else r={per:"l",qty:n*mult}}
+  else{m=d.match(/(?:^|[^\d.])(\d{1,2})\s*(?:pcs|pc|pieces|nos|s)(?![a-z])/)||d.match(/[x×]\s*(\d{1,2})(?!\d)/);
+    if(m&&+m[1]>1)r={per:"pc",qty:+m[1]};
+    else if(/(per|\/)\s*kg|\(\s*kg\s*\)|\bkg\b/.test(d))r={per:"kg",qty:1}}
+  if(!r)return null;
+  if((r.per==="kg"||r.per==="l")&&(r.qty<0.03||r.qty>30))return null;
+  return r;
+}
+function qtyText(u){if(!u)return "";if(u.per==="pc")return u.qty+" pcs";
+  if(u.qty<1)return Math.round(u.qty*1000)+(u.per==="kg"?" g":" ml");return (+u.qty.toFixed(2))+(u.per==="kg"?" kg":" L")}
+function perText(u){return u.per==="kg"?"/ kg":u.per==="l"?"/ litre":"/ piece"}
+function cmpOffer(a,b){
+  if(a.unit&&b.unit&&a.unit.per===b.unit.per)return a.unit.up-b.unit.up;
+  if(a.unit&&!b.unit)return -1;if(!a.unit&&b.unit)return 1;return a.price-b.price}
 const SIZE_RE=/\b(\d+(?:\.\d+)?)\s*(kg|kgs|kilo|g|gm|gms|gram|grams|l|ltr|litre|liter|ml|pcs|pc|pieces|nos)\b/i;
 function sizeOf(text){const m=String(text).match(SIZE_RE);if(!m)return null;
   let u=m[2].toLowerCase();u=/^k/.test(u)?"kg":/^(g|gm|gms|gram|grams)$/.test(u)?"g":/^(l|ltr|litre|liter)$/.test(u)?"l":u==="ml"?"ml":"pcs";
@@ -282,22 +306,29 @@ function nearestArea(la,lo){let best=null;
 function applyLoc(la,lo){const best=nearestArea(la,lo);if(best)st.gps={lat:la,lon:lo,area:best.a,at:Date.now()};
   if(best&&best.d<0.6){st.emirate=best.e;st.area=best.a;save();renderLoc();$("locText").textContent="📍 You're near "+best.a+", "+best.e+".";loadNearShops()}
   else $("locText").textContent="You seem to be outside the UAE areas I know. Pick one below."}
-$("gps").onclick=()=>{
+let locWait=null;
+function locate(){ // resolves when the location attempt finishes (success or not)
+  if(locWait)return locWait;
+  locWait=new Promise(done=>{const t0=Date.now();const iv=setInterval(()=>{if(!pendingLoc||Date.now()-t0>32000){clearInterval(iv);locWait=null;done()}},300);doLocate()});
+  return locWait}
+let pendingLoc=false;
+$("gps").onclick=()=>locate();
+function doLocate(){pendingLoc=true;const finish=()=>{pendingLoc=false};
   $("locText").textContent="Finding you… (up to 20 seconds)";
   if(window.Native&&window.Native.getLocation){
     const id="l"+(++seq);
-    pending[id]={res:b=>{try{const p=JSON.parse(b);applyLoc(p.lat,p.lon)}catch(e){$("locText").textContent="Couldn't read your location. Pick your area below."}},
-      rej:e=>{const m=String(e&&e.message||"");
+    pending[id]={res:b=>{finish();try{const p=JSON.parse(b);applyLoc(p.lat,p.lon)}catch(e){$("locText").textContent="Couldn't read your location. Pick your area below."}},
+      rej:e=>{finish();const m=String(e&&e.message||"");
         if(m==="off"){$("locText").textContent="Location is turned off on your phone. ";const a=document.createElement("a");a.href="#";a.textContent="Turn it on";a.className="open";a.onclick=ev=>{ev.preventDefault();window.Native.openSettings()};$("locText").appendChild(a)}
         else if(m==="denied")$("locText").textContent="Location permission was refused. Allow it in Settings → Apps → Duaa Shop → Permissions, or pick your area below.";
         else $("locText").textContent="Couldn't get your location ("+m+"). Go near a window or pick your area below."}};
-    setTimeout(()=>{if(pending[id]){delete pending[id];$("locText").textContent="Location took too long. Pick your area below."}},30000);
+    setTimeout(()=>{if(pending[id]){delete pending[id];finish();$("locText").textContent="Location took too long. Pick your area below."}},30000);
     window.Native.getLocation(id);return;
   }
-  if(!navigator.geolocation){$("locText").textContent="Location isn't available. Pick your area below.";return}
-  navigator.geolocation.getCurrentPosition(p=>applyLoc(p.coords.latitude,p.coords.longitude),
-    ()=>{$("locText").textContent="Couldn't get your location. Pick your area below."},{timeout:15000,maximumAge:600000});
-};
+  if(!navigator.geolocation){finish();$("locText").textContent="Location isn't available. Pick your area below.";return}
+  navigator.geolocation.getCurrentPosition(p=>{finish();applyLoc(p.coords.latitude,p.coords.longitude)},
+    ()=>{finish();$("locText").textContent="Couldn't get your location. Pick your area below."},{timeout:15000,maximumAge:600000});
+}
 
 // ---------- Native fetch bridge ----------
 const pending={};let seq=0;
@@ -372,7 +403,11 @@ const EXTRA_PTS=[
  [["musaffah","mussafah","musafah","m-26","m26","m 26","m37","m-37","icad","mw4","sanayya","sanaiya musaffah"],24.355,54.505],
  [["baniyas","bani yas"],24.300,54.640],[["shamkha"],24.390,54.700],[["falah"],24.440,54.730],[["reef"],24.455,54.680],
  [["mafraq","hameem"],24.280,54.580],[["madinat zayed","western region","dhafra"],23.690,53.700],[["ruwais"],24.110,52.730],
- [["al ain"],24.207,55.744],[["dubai"],25.204,55.270],[["sharjah"],25.346,55.420],[["ajman"],25.405,55.513]
+ [["al ain"],24.207,55.744],
+ [["taawun","ta'awun"],25.318,55.378],[["buhaira","buhairah"],25.330,55.388],[["qasimia","qasimiya"],25.347,55.400],[["abu shagara","abushagara"],25.336,55.392],
+ [["al khan"],25.322,55.368],[["mega mall"],25.340,55.415],[["sahara centre","sahara center"],25.297,55.373],[["yarmook"],25.352,55.392],
+ [["maysaloon"],25.350,55.400],[["al nahda shj","nahda sharjah","al nahda sharjah"],25.300,55.375],[["muwaileh","muweileh"],25.300,55.460],
+ [["university city"],25.290,55.475],[["al jurf"],25.410,55.480],[["nuaimiya","nuaimia"],25.390,55.450],[["rashidiya ajman","al rashidiya"],25.400,55.430],[["dubai"],25.204,55.270],[["sharjah"],25.346,55.420],[["ajman"],25.405,55.513]
 ];
 function branchPts(){const pts=[];
   for(const r of Object.values(REGIONS))for(const v of Object.values(r.areas))pts.push([v[2],v[0],v[1]]);
@@ -437,7 +472,7 @@ const MOET_RES=MOET_PAGE+"?p_p_id=com_moet_market_analysis_dashboard_web_MarketA
 const moetBr={};
 // the ministry's branch list for the emirate; keep the ~8 nearest branches we can place on the map
 async function moetNearBranches(){
-  const em=MOET_EM[st.emirate];const me=userPt(null);if(!em||!me)return [];
+  const em=moetEm();const me=userPt(null);if(!em||!me)return [];
   const key=em+"|"+me.la.toFixed(2)+","+me.lo.toFixed(2);
   if(moetBr[key])return moetBr[key];
   moetBr[key]=(async()=>{
@@ -447,8 +482,9 @@ async function moetNearBranches(){
   })().catch(e=>{delete moetBr[key];return []});
   return moetBr[key];
 }
+function moetEm(){if(st.emirate==="Sharjah / Ajman"&&/ajman/i.test(st.area||""))return "1";return MOET_EM[st.emirate]}
 async function moet(q){
-  const em=MOET_EM[st.emirate];if(!em)return [];
+  const em=moetEm();if(!em)return [];
   const branches=await moetNearBranches();if(!branches.length)return [];
   const rows=[];
   await limit(4,branches.map(b=>async()=>{
@@ -492,11 +528,17 @@ async function checkItem(t,slug){
     const was=parseFloat(x.was_price);
     const o={store,price,was:was>price?was:null,product:cleanDesc(desc,store),ends:endDate(x.valid_to),
       branches,nearBranch:nb||"",near:!!nb,url:x.url||"",src:x.src||"d4d"};
-    const put=(map)=>{const cur=map[store];if(!cur||(o.near&&!cur.near)||(o.near===cur.near&&o.price<cur.price))map[store]=o};
+    const un=unitOf(desc);if(un)o.unit={...un,up:price/un.qty};
+    const put=(map)=>{const cur=map[store];if(!cur||(o.near&&!cur.near)||(o.near===cur.near&&cmpOffer(o,cur)<0))map[store]=o};
     put(byStoreAny);if(sizeMatches(desc,t.size))put(byStore);
   });
   const sized=Object.values(byStore);
-  const offers=(t.size&&sized.length?sized:Object.values(byStoreAny)).sort((a,b)=>a.price-b.price);
+  let offers=(t.size&&sized.length?sized:Object.values(byStoreAny));
+  // rank by price per kg / litre / piece when sizes are known; offers without a size go after
+  const cnt={};offers.forEach(o=>{if(o.unit)cnt[o.unit.per]=(cnt[o.unit.per]||0)+1});
+  const dom=Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a])[0];
+  offers.forEach(o=>{if(o.unit&&o.unit.per!==dom){o.altUnit=o.unit;delete o.unit}});
+  offers.sort(cmpOffer);
   if(t.size&&!sized.length&&offers.length)offers.forEach(o=>o.sizeNote="Size "+t.size.n+t.size.u+" not confirmed");
   return {...t,offers,found:raw.length,brochures:await broP};
 }
@@ -507,6 +549,7 @@ $("items").addEventListener("input",()=>{st.items=$("items").value;save()});
 $("go").onclick=async()=>{
   const list=$("items").value.split(/[\n,;]+/).map(s=>s.trim()).filter(Boolean);
   if(!list.length){$("status").textContent="Add at least one item.";return}
+  if(window.Native&&window.Native.getLocation&&(!st.gps||Date.now()-st.gps.at>20*60*1000)){$("status").textContent="Finding your location…";await locate()}
   const slug=REGIONS[st.emirate].slug;const ts=list.map(translate);
   $("go").disabled=true;$("progBox").hidden=false;let done=0;
   const tick=()=>{$("prog").style.width=Math.round(100*done/ts.length)+"%";$("status").textContent="Checking offers… "+done+" of "+ts.length+" items"};tick();
@@ -618,13 +661,16 @@ function render(){
     const li=el("li","item");const h=el("div","ihead");const n=el("span","iname",it.input);
     if(it.q.toLowerCase()!==it.input.toLowerCase())n.appendChild(el("small",null," · "+it.q));h.appendChild(n);
     const o=it.offers||[];const b=o[0];
-    if(b){winners[it.input]=b.store;const p=el("span","price",aed(b.price));if(b.was)p.appendChild(el("s",null,Number(b.was).toFixed(2)));h.appendChild(p)}
+    if(b){winners[it.input]=b.store;
+      const p=el("span","price",b.unit?aed(b.unit.up)+" "+perText(b.unit):aed(b.price));
+      if(!b.unit&&b.was)p.appendChild(el("s",null,Number(b.was).toFixed(2)));h.appendChild(p)}
     li.appendChild(h);
     if(b){
       const pl=b.nearBranch||(b.branches||[]).slice(0,2).join(", ")+((!b.nearBranch&&(b.branches||[]).length>2)?" +"+(b.branches.length-2)+" more":"");
       const r=el("div","win-row");const top=el("div");top.appendChild(el("span","medal","Cheapest at"));top.appendChild(el("span","shop",b.store));
       if(b.near)top.appendChild(el("span","near","Near you"));r.appendChild(top);
       const meta=[b.product,b.ends?"Ends "+b.ends:"",b.src==="moet"?"Official shelf price (UAE Ministry of Economy)":"Brochure offer (D4D)"].filter(Boolean).join(" · ");if(meta)r.appendChild(el("div","where",meta));
+      r.appendChild(el("div","packline",b.unit?"Pack: "+qtyText(b.unit)+" for "+aed(b.price)+(b.was?" (was "+Number(b.was).toFixed(2)+")":"")+" · compared by price "+perText(b.unit):"Pack size not shown; price "+aed(b.price)+" per pack"));
       if(b.sizeNote)r.appendChild(el("div","where","⚠ "+b.sizeNote+", check the pack"));
       // where to buy it: nearest branch of the cheapest shop, with distance and directions
       const nbI=nearestBranch(b.branches||[],userPt(L));
@@ -634,9 +680,10 @@ function render(){
       const links=el("div","links");links.appendChild(dirBtn(b.store,place,"📍 Go"));links.appendChild(openLink(b.url));li.appendChild(links);
       // if the cheapest is far, also show the cheapest within 5 km
       if(nbI&&nbI.km>5){const me2=userPt(L);let alt=null;
-        (it.offers||[]).slice(1).forEach(o=>{const n=nearestBranch(o.branches||[],me2);if(n&&n.km<=5&&(!alt||o.price<alt.o.price))alt={o,n}});
+        (it.offers||[]).slice(1).forEach(o=>{const n=nearestBranch(o.branches||[],me2);if(n&&n.km<=5&&(!alt||cmpOffer(o,alt.o)<0))alt={o,n}});
         if(alt){const r2=el("div","win-row");const t2=el("div");t2.appendChild(el("span","medal","Cheapest near you"));t2.appendChild(el("span","shop",alt.o.store));
-          const pr=el("span","price2",aed(alt.o.price));t2.appendChild(pr);r2.appendChild(t2);
+          const pr=el("span","price2",alt.o.unit?aed(alt.o.unit.up)+" "+perText(alt.o.unit):aed(alt.o.price));t2.appendChild(pr);r2.appendChild(t2);
+          if(alt.o.unit)r2.appendChild(el("div","packline","Pack: "+qtyText(alt.o.unit)+" for "+aed(alt.o.price)));
           r2.appendChild(el("div","dist2","📍 "+alt.n.branch+" · "+kmText(alt.n.km,alt.n.src)));li.appendChild(r2);
           const l2=el("div","links");l2.appendChild(dirBtn(alt.o.store,alt.n.branch,"📍 Go"));li.appendChild(l2)}}
     }
@@ -730,6 +777,7 @@ $("updBtn").onclick=async()=>{
 setTimeout(()=>checkUpdate(false),1500);
 
 renderLoc();renderHistory();render();
+setTimeout(()=>{if(window.Native&&window.Native.getLocation)locate()},600);
 </script>
 </body>
 </html>
