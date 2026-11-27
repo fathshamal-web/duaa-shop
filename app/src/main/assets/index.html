@@ -290,7 +290,20 @@ function translate(raw){
 const $=id=>document.getElementById(id);
 let st={emirate:"Abu Dhabi",area:"",items:"pril, soap, veppila, mallichep, neychor ari, dosa mavu, savaala, takkali, carrot, apple, egg",last:null,history:[]};
 try{Object.assign(st,JSON.parse(localStorage.getItem("duaa")||"{}"))}catch(e){}
-function save(){try{localStorage.setItem("duaa",JSON.stringify(st))}catch(e){}}
+// Saved data is kept small on purpose: the last search (top 15 shops and 40 product choices per item)
+// and the last 5 searches (top 3 shops per item). Typically well under 0.5 MB.
+function slimOffer(o){return {store:o.store,price:o.price,was:o.was,product:o.product,ends:o.ends,branches:(o.branches||[]).slice(0,5),
+  nearBranch:o.nearBranch,near:o.near,url:o.url,src:o.src,unit:o.unit,u0:o.u0,sizeNote:o.sizeNote,sizeOk:o.sizeOk}}
+function slimItem(it,full){return {input:it.input,q:it.q,qs:it.qs,groups:it.groups,exclude:it.exclude,size:it.size,picked:it.picked,error:it.error,
+  offers:(it.offers||[]).slice(0,full?15:3).map(slimOffer),brochures:full?(it.brochures||[]).slice(0,6):[],
+  cands:full?(it.cands||[]).slice(0,40).map(slimOffer):undefined}}
+function compact(){return {emirate:st.emirate,area:st.area,items:st.items,gps:st.gps,
+  last:st.last?{...st.last,items:st.last.items.map(it=>slimItem(it,true))}:null,
+  history:(st.history||[]).slice(0,5).map(h=>({at:h.at,emirate:h.emirate,area:h.area,list:h.list,items:(h.items||[]).map(it=>slimItem(it,false))}))}}
+function save(){
+  try{localStorage.setItem("duaa",JSON.stringify(compact()))}
+  catch(e){try{st.history=[];localStorage.setItem("duaa",JSON.stringify(compact()))}catch(_){}} // storage full: drop history and keep going
+}
 
 function renderLoc(){
   const eb=$("emirates");eb.textContent="";
@@ -586,7 +599,7 @@ $("go").onclick=async()=>{
   for(let i=0;i<res.length;i++)if(res[i]&&res[i].error){$("status").textContent="Re-checking "+res[i].input+"…";try{res[i]=await checkItem(ts[i],slug)}catch(e){}}
   st.last={at:new Date().toISOString(),emirate:st.emirate,area:st.area,items:res,list:list.join(", ")};
   const slim={...st.last,items:st.last.items.map(({cands,...rest})=>rest)};
-  st.history=[slim].concat((st.history||[]).filter(h=>h.list!==st.last.list||h.area!==st.last.area)).slice(0,10);
+  st.history=[slim].concat((st.history||[]).filter(h=>h.list!==st.last.list||h.area!==st.last.area)).slice(0,5);
   save();renderHistory();
   $("go").disabled=false;$("progBox").hidden=true;render();
 };

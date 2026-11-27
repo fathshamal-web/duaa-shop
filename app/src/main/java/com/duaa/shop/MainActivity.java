@@ -63,6 +63,23 @@ public class MainActivity extends Activity {
         if (Build.VERSION.SDK_INT >= 33) registerReceiver(installReceiver, f, android.content.Context.RECEIVER_NOT_EXPORTED);
         else registerReceiver(installReceiver, f);
         web.loadUrl("file:///android_asset/index.html");
+        trimCache();
+    }
+
+    /** Brochure pictures are cached by the web view; if the cache passes 30 MB, empty it. */
+    private void trimCache() {
+        pool.execute(() -> {
+            if (dirSize(getCacheDir()) > 30L * 1024 * 1024) runOnUiThread(() -> web.clearCache(true));
+        });
+    }
+
+    private static long dirSize(java.io.File f) {
+        if (f == null || !f.exists()) return 0;
+        if (f.isFile()) return f.length();
+        long total = 0;
+        java.io.File[] kids = f.listFiles();
+        if (kids != null) for (java.io.File k : kids) total += dirSize(k);
+        return total;
     }
 
     private boolean hasLocation() {
