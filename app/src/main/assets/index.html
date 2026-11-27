@@ -90,6 +90,14 @@ button.dir{background:var(--tag);color:var(--tag-fg);border-color:var(--tag);pad
 .upd{background:var(--ok);color:#fff;border-radius:10px;padding:12px 14px;display:flex;gap:12px;align-items:center}
 .upd div{flex:1;min-width:0;display:flex;flex-direction:column;font-size:.9rem}
 .upd button{background:#fff;color:var(--ok);border-color:#fff}
+.shopcard{border-top:1px solid var(--line);padding-top:10px;display:flex;flex-direction:column;gap:6px}
+.shopcard .sname{font-weight:700;font-size:1.02rem}
+.shopcard .km{color:var(--ok);font-weight:700;font-size:.85rem;margin-left:6px}
+.flyer{display:flex;gap:8px;align-items:center;font-size:.88rem}
+.flyer span{flex:1;min-width:0;overflow-wrap:anywhere}
+.flyer button{font-size:.8rem;padding:5px 10px;background:var(--tag);color:var(--tag-fg);border-color:var(--tag)}
+.sbtns{display:flex;gap:6px;flex-wrap:wrap}
+.sbtns button{font-size:.8rem;padding:6px 10px}
 .empty{color:var(--muted);text-align:center;padding:18px;border:1px dashed var(--line);border-radius:10px}
 </style>
 </head>
@@ -110,6 +118,11 @@ button.dir{background:var(--tag);color:var(--tag-fg);border-color:var(--tag);pad
     <div class="chips" id="emirates"></div>
     <span class="lbl">Area</span>
     <div class="chips" id="areas"></div>
+  </section>
+
+  <section class="panel" id="shopsPanel">
+    <div class="locrow"><span class="lbl" style="flex:1">🏪 5 nearest supermarkets · this week's offers</span><button id="shopsBtn" style="font-size:.85rem;padding:6px 10px">Show</button></div>
+    <div id="shopsOut" class="hint">Tap Show to see the 5 nearest supermarkets and hypermarkets with their current brochures.</div>
   </section>
 
   <section class="panel">
@@ -256,7 +269,7 @@ function nearestArea(la,lo){let best=null;
     const d=Math.hypot(la-v[0],(lo-v[1])*Math.cos(la*Math.PI/180));if(!best||d<best.d)best={e,a,d}}
   return best}
 function applyLoc(la,lo){const best=nearestArea(la,lo);if(best)st.gps={lat:la,lon:lo,area:best.a,at:Date.now()};
-  if(best&&best.d<0.6){st.emirate=best.e;st.area=best.a;save();renderLoc();$("locText").textContent="📍 You're near "+best.a+", "+best.e+"."}
+  if(best&&best.d<0.6){st.emirate=best.e;st.area=best.a;save();renderLoc();$("locText").textContent="📍 You're near "+best.a+", "+best.e+".";loadNearShops()}
   else $("locText").textContent="You seem to be outside the UAE areas I know. Pick one below."}
 $("gps").onclick=()=>{
   $("locText").textContent="Finding you… (up to 20 seconds)";
@@ -442,6 +455,61 @@ function renderHistory(){
     li.appendChild(b);ul.appendChild(li)});
 }
 $("histClear").onclick=()=>{st.history=[];save();renderHistory()};
+// ---------- 5 nearest supermarkets with this week's brochures ----------
+const CF_IDS={"carrefour":"carrefour-hyper-1049","lulu":"lulu-1047","adcoop":"adcoop-1059","mark & save":"mark-save-3252","k m trading":"k-m-trading-1065","k.m trading":"k-m-trading-1065","viva":"viva-supermarket-1360","grand emirates":"grand-emirates-market-2812","nesto":"nesto-1100","ramez":"ramez-1053","safeer":"safeer-market-1055","al madina":"al-madina-hypermarket-1202","west zone":"west-zone-supermarket-1129","ok hypermarket":"ok-hypermarket-1620","bigmart":"bigmart-2353","talal":"talal-market-2376","seven emirates":"seven-emirates-supermarket-2396","grand hyper":"grand-1214","almaya":"almaya-1060","al adil":"al-adil-trading-1165","desert fresh":"desert-fresh-supermarket-3448"};
+const CF_CITY={"Abu Dhabi":"abu-dhabi","Al Ain":"al-ain","Dubai":"dubai","Sharjah / Ajman":"sharjah","Ras al Khaimah":"ras-al-khaimah","Fujairah":"fujairah","Umm al Quwain":"umm-al-quwain"};
+function cfUrl(store){const n=store.toLowerCase();const city=CF_CITY[st.emirate]||"abu-dhabi";
+  const base="https://clicflyer.com/shoppers/en/united-arab-emirates/"+city;
+  for(const [k,v] of Object.entries(CF_IDS))if(n.includes(k))return base+"/retailers/"+v;
+  return base+"/alloffer?searchtext="+encodeURIComponent(store)}
+function igUrl(store){return "https://www.instagram.com/explore/search/keyword/?q="+encodeURIComponent(store+" UAE")}
+function fbUrl(store){return "https://www.facebook.com/search/pages/?q="+encodeURIComponent(store+" UAE")}
+const GROCERY=/hyper|super|market|mart|coop|co-op|trading|grocer|lulu|carrefour|nesto|spar|choithram|geant|viva|safeer|spinneys|waitrose|madina|madeena|baniyas spike|talal|almaya|ramez|west zone|fresh/i;
+const NOT_GROCERY=/snoonu|sharaf|emax|ecity|jumbo|pharma|ikea|noon|amazon|toy|electron|mobile|perfume|furniture|optic|motors|auto|jarir|home centre|homes r us|pan emirates|2xl|danube|ace hardware|centrepoint|max fashion|splash|babyshop|lifestyle|mumuso|daiso/i;
+function storeName(slug){return String(slug||"").replace(/-+/g," ").replace(/\b[a-z]/g,c=>c.toUpperCase())}
+function nameFromTitle(t,slug){const m=String(t||"").match(/^(.*?)\s+-\s+/);return niceStore(m?m[1]:storeName(slug))}
+async function loadNearShops(){
+  const out=$("shopsOut");const me=userPt(null);
+  if(!me){out.textContent="Tap 📍 Use my location or pick your area first.";return}
+  out.textContent="Loading this week's brochures…";
+  try{
+    const slug=REGIONS[st.emirate].slug;
+    const html=await get("https://d4donline.com/en/uae/"+slug+"/offers");
+    const doc=new DOMParser().parseFromString(html,"text/html");
+    const S={};
+    doc.querySelectorAll('a[href*="/offers/"]').forEach(a=>{
+      const href=a.getAttribute("href")||"";const m=href.match(/\/offers\/([a-z0-9-]+)-(\d+)\/(\d+)\//);if(!m)return;
+      const q=sel=>{const e=a.querySelector(sel);return e?e.textContent.replace(/\s+/g," ").trim():""};
+      const store=niceStore(q(".client-name")||storeName(m[1]));
+      if(!store||NOT_GROCERY.test(store+" "+m[1])||!GROCERY.test(store+" "+m[1]))return;
+      const label=q(".book-name")||"Weekly offers";
+      const days=(q(".book-date").match(/\d+/)||[])[0];
+      const s=S[store]||(S[store]={store,flyers:[],seen:new Set(),best:null});
+      if(s.seen.has(m[3]))return;s.seen.add(m[3]);
+      // a brochure can cover several branches ("Airport Road | Saadiyat"): use the nearest part
+      let km=null,part="";
+      label.split(/[|,&]|\s-\s/).forEach(seg=>{const p=pointFor(seg);if(p){const d=kmBetween(me,p);if(km==null||d<km){km=d;part=seg.trim()}}});
+      s.flyers.push({label,url:new URL(href,"https://d4donline.com").href,days,km});
+      if(km!=null&&(!s.best||km<s.best.km))s.best={km,branch:part||label};
+    });
+    let shops=Object.values(S).filter(x=>x.best).sort((a,b)=>a.best.km-b.best.km).slice(0,5);
+    out.textContent="";
+    if(!shops.length){out.textContent="Couldn't find brochures with branch locations near you right now. Try again later.";return}
+    shops.forEach(x=>{
+      const c=el("div","shopcard");const h=el("div");h.appendChild(el("span","sname",x.store));h.appendChild(el("span","km",kmText(x.best.km,me.src)));c.appendChild(h);
+      c.appendChild(el("div","where","📍 "+x.best.branch));
+      x.flyers.sort((a,b)=>(a.km==null?50:a.km)-(b.km==null?50:b.km)).slice(0,3).forEach(f=>{
+        const r=el("div","flyer");r.appendChild(el("span",null,f.label+(f.days?" · "+f.days+" days left":"")));
+        const b=el("button",null,"See offer");b.onclick=()=>window.Native&&window.Native.openUrl(f.url);r.appendChild(b);c.appendChild(r)});
+      const bt=el("div","sbtns");
+      const mk=(t,u)=>{const b=el("button",null,t);b.onclick=()=>window.Native&&window.Native.openUrl(u);return b};
+      bt.appendChild(dirBtn(x.store,x.best.branch,"📍 Go"));bt.appendChild(mk("ClicFlyer",cfUrl(x.store)));
+      bt.appendChild(mk("Instagram",igUrl(x.store)));bt.appendChild(mk("Facebook",fbUrl(x.store)));
+      c.appendChild(bt);out.appendChild(c)});
+    out.appendChild(el("div","note","Distances are approximate, by area. Instagram and Facebook open a search for the shop: pick the page with the blue tick."));
+  }catch(e){out.textContent="Couldn't load brochures ("+e.message+"). Check your internet and tap Show again."}
+}
+$("shopsBtn").onclick=loadNearShops;
 function mapsUrl(store,branch){
   const L=st.last||{};
   const clean=t=>String(t||"").replace(/[–—-]+/g," ").replace(/\s+/g," ").trim();
