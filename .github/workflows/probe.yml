@@ -43,12 +43,10 @@ jobs:
           json.dump(out, open("pages/search.json", "w"), indent=1)
           PY
           python3 probe.py
-          U='https://eu.kimbicdn.com/thumbor/71zi9djSds9csn-OwplGCOlagH4=/full-fit-in/240x240/filters:format(webp):quality(65)/ae/data/87/29175/9.jpg'
-          BIG=$(echo "$U" | sed -E 's#full-fit-in/[0-9]+x[0-9]+#full-fit-in/1200x0#')
-          RAW="https://eu.kimbicdn.com/$(echo "$U" | grep -oE 'ae/data/[0-9]+/[0-9]+/[0-9]+\.jpg')"
-          RAW2="https://www.kimbino.ae/$(echo "$U" | grep -oE 'ae/data/[0-9]+/[0-9]+/[0-9]+\.jpg' | sed 's#^ae/##')"
-          for x in "$U" "$BIG" "$RAW" "$RAW2"; do echo "IMG $(curl -s -o /dev/null -w '%{http_code} %{size_download} %{content_type}' "$x") $x"; done
-          curl -sSL -A "Mozilla/5.0" -o pages/leaflet.html "https://www.kimbino.ae/geant/geant-offers-from-friday-27-nov-2026-6029175/" -w "leaflet %{http_code}\n"
+          UA="Mozilla/5.0 (Linux; Android 14; SM-S911B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36"
+          for u in "https://www.moet.gov.ae/en/essential-goods-prices-platform" "https://www.moet.gov.ae/essential-goods-prices-platform"; do
+            n=$(echo "$u" | sed 's#https://www.moet.gov.ae/##; s#[^a-z0-9]#_#g'); curl -sSL -A "$UA" --max-time 40 -o "pages/m_$n.html" -w "$u %{http_code} %{size_download} %{url_effective}\n" "$u" || echo "$u failed"
+          done
       - name: Save results to probe branch
         run: |
           cd pages
