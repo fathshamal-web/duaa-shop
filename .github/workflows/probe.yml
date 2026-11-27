@@ -43,6 +43,12 @@ jobs:
           json.dump(out, open("pages/search.json", "w"), indent=1)
           PY
           python3 probe.py
+          UA="Mozilla/5.0 (Linux; Android 14; SM-S911B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36"
+          curl -sSL -A "$UA" -H "Accept-Language: en" -o pages/offers.html "https://d4donline.com/en/uae/abu-dhabi/offers"
+          FL=$(grep -oE 'https://d4donline.com/en/uae/abu-dhabi/offers/[a-z0-9-]+-[0-9]+/[0-9]+/[^"]+' pages/offers.html | head -1)
+          echo "flyer: $FL"; curl -sSL -A "$UA" -H "Accept-Language: en" -o pages/flyer.html "$FL"
+          CO=$(grep -oE 'https://d4donline.com/en/uae/abu-dhabi/(companies|company|stores?|retailers?)/[^"]+' pages/offers.html | head -1)
+          echo "company: $CO"; [ -n "$CO" ] && curl -sSL -A "$UA" -H "Accept-Language: en" -o pages/company.html "$CO" || true
       - name: Save results to probe branch
         run: |
           cd pages
