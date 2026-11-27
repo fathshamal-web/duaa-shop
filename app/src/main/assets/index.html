@@ -106,6 +106,7 @@ button.dir{background:var(--tag);color:var(--tag-fg);border-color:var(--tag);pad
 .viewer .vh span{flex:1;min-width:0}
 .viewer .vimg{flex:1;overflow:auto;margin-top:8px}
 .viewer img{width:100%;height:auto;display:block}
+.dist2{font-size:.88rem;font-weight:700;color:var(--ok)}
 .empty{color:var(--muted);text-align:center;padding:18px;border:1px dashed var(--line);border-radius:10px}
 </style>
 </head>
@@ -584,8 +585,19 @@ function render(){
       if(b.near)top.appendChild(el("span","near","Near you"));r.appendChild(top);
       const meta=[b.product,b.ends?"Ends "+b.ends:""].filter(Boolean).join(" · ");if(meta)r.appendChild(el("div","where",meta));
       if(b.sizeNote)r.appendChild(el("div","where","⚠ "+b.sizeNote+", check the pack"));
+      // where to buy it: nearest branch of the cheapest shop, with distance and directions
+      const nbI=nearestBranch(b.branches||[],userPt(L));
+      const place=nbI?nbI.branch:(b.nearBranch||(b.branches||[])[0]||"");
+      r.appendChild(el("div","dist2","📍 "+(place||"Nearest "+b.store)+(nbI?" · "+kmText(nbI.km,nbI.src):"")));
       li.appendChild(r);
-      li.appendChild(openLink(b.url));
+      const links=el("div","links");links.appendChild(dirBtn(b.store,place,"📍 Go"));links.appendChild(openLink(b.url));li.appendChild(links);
+      // if the cheapest is far, also show the cheapest within 5 km
+      if(nbI&&nbI.km>5){const me2=userPt(L);let alt=null;
+        (it.offers||[]).slice(1).forEach(o=>{const n=nearestBranch(o.branches||[],me2);if(n&&n.km<=5&&(!alt||o.price<alt.o.price))alt={o,n}});
+        if(alt){const r2=el("div","win-row");const t2=el("div");t2.appendChild(el("span","medal","Cheapest near you"));t2.appendChild(el("span","shop",alt.o.store));
+          const pr=el("span","price2",aed(alt.o.price));t2.appendChild(pr);r2.appendChild(t2);
+          r2.appendChild(el("div","dist2","📍 "+alt.n.branch+" · "+kmText(alt.n.km,alt.n.src)));li.appendChild(r2);
+          const l2=el("div","links");l2.appendChild(dirBtn(alt.o.store,alt.n.branch,"📍 Go"));li.appendChild(l2)}}
     }
     if(it.brochures&&it.brochures.length){li.appendChild(el("div","where","📄 Also in these brochures (tap to see the price):"));const row=el("div","bro");
       it.brochures.forEach(x=>{const b=el("button");const im=el("img");im.src=x.thumb;im.alt=x.shop+" page "+x.page;im.loading="lazy";b.appendChild(im);
