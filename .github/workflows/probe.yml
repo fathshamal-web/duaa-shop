@@ -44,11 +44,9 @@ jobs:
           PY
           python3 probe.py
           UA="Mozilla/5.0 (Linux; Android 14; SM-S911B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36"
-          curl -sSL -A "$UA" -H "Accept-Language: en" -o pages/offers.html "https://d4donline.com/en/uae/abu-dhabi/offers"
-          FL=$(grep -oE 'https://d4donline.com/en/uae/abu-dhabi/offers/[a-z0-9-]+-[0-9]+/[0-9]+/[^"]+' pages/offers.html | head -1)
-          echo "flyer: $FL"; curl -sSL -A "$UA" -H "Accept-Language: en" -o pages/flyer.html "$FL"
-          CO=$(grep -oE 'https://d4donline.com/en/uae/abu-dhabi/(companies|company|stores?|retailers?)/[^"]+' pages/offers.html | head -1)
-          echo "company: $CO"; [ -n "$CO" ] && curl -sSL -A "$UA" -H "Accept-Language: en" -o pages/company.html "$CO" || true
+          for u in "https://www.kimbino.ae/products/onion/" "https://www.kimbino.ae/search/?q=onion" "https://www.kimbino.ae/abu-dhabi-coop/" "https://www.kimbino.ae/lulu/"; do
+            n=$(echo "$u" | sed 's#https://www.kimbino.ae/##; s#[^a-z0-9]#_#g'); curl -sSL -A "$UA" -o "pages/k_$n.html" -w "$u %{http_code} %{size_download}\n" "$u" || true
+          done
       - name: Save results to probe branch
         run: |
           cd pages
