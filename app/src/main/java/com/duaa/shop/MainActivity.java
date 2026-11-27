@@ -250,7 +250,7 @@ public class MainActivity extends Activity {
                     URL u = new URL(url);
                     if (!"https".equals(u.getProtocol())) throw new Exception("https only");
                     String host = u.getHost();
-                    if (!(host.endsWith("d4donline.com") || host.endsWith("clicflyer.com") || host.endsWith("kimbino.ae"))) throw new Exception("host not allowed");
+                    if (!(host.endsWith("d4donline.com") || host.endsWith("clicflyer.com") || host.endsWith("kimbino.ae") || host.endsWith("moet.gov.ae"))) throw new Exception("host not allowed");
                     c = (HttpURLConnection) u.openConnection();
                     c.setConnectTimeout(15000);
                     c.setReadTimeout(25000);

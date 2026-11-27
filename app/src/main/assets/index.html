@@ -158,7 +158,8 @@ button.dir{background:var(--tag);color:var(--tag-fg);border-color:var(--tag);pad
     <h2 id="shopsHead" hidden>Shops with the most of your items</h2>
     <ul id="shops"></ul>
     <p class="note" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span id="verText"></span><button id="updCheck" style="font-size:.8rem;padding:5px 10px">Check for updates</button></p>
-    <p class="note">Prices from D4D Online store brochures. D4D marks its prices as AI-read from flyers; the brochure price wins if it differs. Check pack sizes on the shelf.</p>
+    <p class="note" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span>Staples like rice, oil, eggs, sugar and chicken: compare on the official government platform.</span><button id="moetBtn" style="font-size:.8rem;padding:5px 10px">🏛 Official price check</button></p>
+    <p class="note">Prices from D4D Online store brochures and the UAE Ministry of Economy price platform (official shelf prices). D4D marks its prices as AI-read from flyers; the brochure price wins if it differs. Check pack sizes on the shelf.</p>
   </section>
 </div>
 
@@ -427,10 +428,49 @@ async function openViewer(b){
 }
 $("vClose").onclick=()=>{$("viewer").hidden=true;$("vImg").src=""};
 $("vOpen").onclick=()=>{if(vUrl&&window.Native)window.Native.openUrl(vUrl)};
+// ---------- Official shelf prices: UAE Ministry of Economy & Tourism open data ----------
+const MOET_PAGE="https://www.moet.gov.ae/en/essential-goods-prices-platform";
+const MOET_NS="_com_moet_market_analysis_dashboard_web_MarketAnalysisDashboardWebPortlet_INSTANCE_wpmd_";
+const MOET_API=MOET_PAGE+"?p_p_id=com_moet_market_analysis_dashboard_web_MarketAnalysisDashboardWebPortlet_INSTANCE_wpmd&p_p_lifecycle=2&p_p_state=normal&p_p_mode=view&p_p_resource_id=%2Fproduct%2Ffilter&p_p_cacheability=cacheLevelPage";
+const MOET_EM={"Ajman":"1","Sharjah / Ajman":"5","Dubai":"2","Abu Dhabi":"3","Ras al Khaimah":"4","Al Ain":"6"};
+const MOET_RES=MOET_PAGE+"?p_p_id=com_moet_market_analysis_dashboard_web_MarketAnalysisDashboardWebPortlet_INSTANCE_wpmd&p_p_lifecycle=2&p_p_state=normal&p_p_mode=view&p_p_cacheability=cacheLevelPage&p_p_resource_id=";
+const moetBr={};
+// the ministry's branch list for the emirate; keep the ~8 nearest branches we can place on the map
+async function moetNearBranches(){
+  const em=MOET_EM[st.emirate];const me=userPt(null);if(!em||!me)return [];
+  const key=em+"|"+me.la.toFixed(2)+","+me.lo.toFixed(2);
+  if(moetBr[key])return moetBr[key];
+  moetBr[key]=(async()=>{
+    const list=JSON.parse(await get(MOET_RES+encodeURIComponent("/get/branches")+"&"+new URLSearchParams({[MOET_NS+"emirateId"]:em})));
+    return list.map(b=>{const p=pointFor(b.name);return p?{id:b.branchId,name:b.name,km:kmBetween(me,p)}:null})
+      .filter(b=>b&&b.km<=8).sort((x,y)=>x.km-y.km).slice(0,8);
+  })().catch(e=>{delete moetBr[key];return []});
+  return moetBr[key];
+}
+async function moet(q){
+  const em=MOET_EM[st.emirate];if(!em)return [];
+  const branches=await moetNearBranches();if(!branches.length)return [];
+  const rows=[];
+  await limit(4,branches.map(b=>async()=>{
+    const qs=new URLSearchParams({[MOET_NS+"search"]:q,[MOET_NS+"emirateId"]:em,[MOET_NS+"branchId"]:b.id,[MOET_NS+"pageSize"]:"200",[MOET_NS+"page"]:"1"});
+    const j=JSON.parse(await get(MOET_RES+encodeURIComponent("/product/filter")+"&"+qs));(j.data||[]).forEach(r=>rows.push(r));
+  }));
+  // one record per shop + product, with every nearby branch that sells it at the lowest price
+  const g={};
+  rows.forEach(r=>{if(r.isOnlineStore)return;const price=parseFloat(r.price);if(!(price>0))return;
+    const k=r.storeName+"|"+r.productName;const cur=g[k];
+    if(!cur||price<cur.price)g[k]={price,store:r.storeName,product:r.productName,branches:[r.branchName]};
+    else if(price===cur.price&&!cur.branches.includes(r.branchName))cur.branches.push(r.branchName)});
+  return Object.values(g).map((x,i)=>({idoffer_special:"moet"+i+x.store+x.product,price:x.price,was_price:null,text_footer_en:x.store,
+    description:x.product,valid_to:"",company_branch:x.branches,url:MOET_PAGE,src:"moet"}));
+}
 async function checkItem(t,slug){
   const broP=kimbino(t.qs[0]).catch(()=>[]);
-  const raw=[];const seenIds=new Set();
-  for(const q of t.qs){(await searchAll(q,slug)).forEach(x=>{if(!seenIds.has(x.idoffer_special)){seenIds.add(x.idoffer_special);raw.push(x)}})}
+  const moP=moet(t.qs[0]).catch(()=>[]);
+  const raw=[];const seenIds=new Set();let d4dErr=null;
+  for(const q of t.qs){try{(await searchAll(q,slug)).forEach(x=>{if(!seenIds.has(x.idoffer_special)){seenIds.add(x.idoffer_special);raw.push(x)}})}catch(e){d4dErr=e}}
+  const mo=await moP;raw.push(...mo);
+  if(d4dErr&&!raw.length)throw d4dErr;
   const esc=w=>w.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
   const groups=t.groups.map(g=>g.map(w=>new RegExp("(^|[^a-z])"+esc(w),"i")));
   const near=nearKw(), now=Date.now();
@@ -451,7 +491,7 @@ async function checkItem(t,slug){
     const nb=branches.find(b=>near.some(k=>b.toLowerCase().includes(k)));
     const was=parseFloat(x.was_price);
     const o={store,price,was:was>price?was:null,product:cleanDesc(desc,store),ends:endDate(x.valid_to),
-      branches,nearBranch:nb||"",near:!!nb,url:x.url||""};
+      branches,nearBranch:nb||"",near:!!nb,url:x.url||"",src:x.src||"d4d"};
     const put=(map)=>{const cur=map[store];if(!cur||(o.near&&!cur.near)||(o.near===cur.near&&o.price<cur.price))map[store]=o};
     put(byStoreAny);if(sizeMatches(desc,t.size))put(byStore);
   });
@@ -550,6 +590,7 @@ async function loadNearShops(){
   }catch(e){out.textContent="Couldn't load brochures ("+e.message+"). Check your internet and tap Show again."}
 }
 $("shopsBtn").onclick=loadNearShops;
+$("moetBtn").onclick=()=>window.Native&&window.Native.openUrl(MOET_PAGE);
 function mapsUrl(store,branch){
   const L=st.last||{};
   const clean=t=>String(t||"").replace(/[–—-]+/g," ").replace(/\s+/g," ").trim();
@@ -583,7 +624,7 @@ function render(){
       const pl=b.nearBranch||(b.branches||[]).slice(0,2).join(", ")+((!b.nearBranch&&(b.branches||[]).length>2)?" +"+(b.branches.length-2)+" more":"");
       const r=el("div","win-row");const top=el("div");top.appendChild(el("span","medal","Cheapest at"));top.appendChild(el("span","shop",b.store));
       if(b.near)top.appendChild(el("span","near","Near you"));r.appendChild(top);
-      const meta=[b.product,b.ends?"Ends "+b.ends:""].filter(Boolean).join(" · ");if(meta)r.appendChild(el("div","where",meta));
+      const meta=[b.product,b.ends?"Ends "+b.ends:"",b.src==="moet"?"Official shelf price (UAE Ministry of Economy)":"Brochure offer (D4D)"].filter(Boolean).join(" · ");if(meta)r.appendChild(el("div","where",meta));
       if(b.sizeNote)r.appendChild(el("div","where","⚠ "+b.sizeNote+", check the pack"));
       // where to buy it: nearest branch of the cheapest shop, with distance and directions
       const nbI=nearestBranch(b.branches||[],userPt(L));
