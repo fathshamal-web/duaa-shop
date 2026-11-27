@@ -98,11 +98,20 @@ button.dir{background:var(--tag);color:var(--tag-fg);border-color:var(--tag);pad
 .flyer button{font-size:.8rem;padding:5px 10px;background:var(--tag);color:var(--tag-fg);border-color:var(--tag)}
 .sbtns{display:flex;gap:6px;flex-wrap:wrap}
 .sbtns button{font-size:.8rem;padding:6px 10px}
+.bro{display:flex;gap:8px;overflow-x:auto;padding:4px 0}
+.bro button{flex:none;width:92px;padding:4px;display:flex;flex-direction:column;gap:3px;font-size:.72rem;font-weight:600;background:var(--bg)}
+.bro img{width:84px;height:84px;object-fit:cover;border-radius:6px;background:var(--line)}
+.viewer{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:50;display:flex;flex-direction:column;padding:calc(10px + env(safe-area-inset-top,0px)) 10px calc(10px + env(safe-area-inset-bottom,0px))}
+.viewer .vh{display:flex;gap:8px;align-items:center;color:#fff;font-size:.9rem}
+.viewer .vh span{flex:1;min-width:0}
+.viewer .vimg{flex:1;overflow:auto;margin-top:8px}
+.viewer img{width:100%;height:auto;display:block}
 .empty{color:var(--muted);text-align:center;padding:18px;border:1px dashed var(--line);border-radius:10px}
 </style>
 </head>
 <body>
 <div class="top"><b>Duaa Shop</b><span>Cheapest grocery offers near you</span></div>
+<div class="viewer" id="viewer" hidden><div class="vh"><span id="vTitle"></span><button id="vOpen">Open brochure</button><button id="vClose">Close</button></div><div class="vimg"><img id="vImg" alt="Brochure page"></div></div>
 <div class="wrap">
   <div class="upd" id="upd" hidden>
     <div><b id="updTitle">New version available</b><span id="updText"></span></div>
@@ -388,7 +397,27 @@ function cleanDesc(d,store){
 }
 function endDate(v){const m=String(v||"").match(/^(\d{4})-(\d{2})-(\d{2})/);if(!m)return "";
   return new Date(+m[1],+m[2]-1,+m[3]).toLocaleDateString("en-GB",{day:"numeric",month:"short"})}
+// ---------- Brochure pages that mention the item (Kimbino) ----------
+async function kimbino(q){
+  const html=await get("https://www.kimbino.ae/search/?q="+encodeURIComponent(q));
+  const doc=new DOMParser().parseFromString(html,"text/html");const out=[];const seen=new Set();
+  doc.querySelectorAll("a.brochure-thumb").forEach(a=>{
+    const href=a.getAttribute("href")||"";const img=a.querySelector("img");const shop=(a.querySelector(".shop-name")||{}).textContent||"";
+    const page=(href.match(/#page_(\d+)/)||[])[1]||"";const tm=a.querySelectorAll("time");const end=tm.length?tm[tm.length-1].getAttribute("datetime"):"";
+    if(end&&Date.parse(end)<Date.now())return;
+    const key=shop+page+href;if(seen.has(key)||!img)return;seen.add(key);
+    out.push({shop:shop.trim(),page,url:new URL(href,"https://www.kimbino.ae").href,thumb:img.getAttribute("src"),
+      big:img.getAttribute("src").replace(/full-fit-in\/\d+x\d+/,"full-fit-in/1200x0").replace(/quality\(\d+\)/,"quality(80)"),
+      ends:end?new Date(end).toLocaleDateString("en-GB",{day:"numeric",month:"short"}):""});
+  });
+  return out.slice(0,8);
+}
+let vUrl="";
+function openViewer(b){$("vTitle").textContent=b.shop+(b.page?" · page "+b.page:"")+(b.ends?" · until "+b.ends:"");$("vImg").src=b.big;vUrl=b.url;$("viewer").hidden=false}
+$("vClose").onclick=()=>{$("viewer").hidden=true;$("vImg").src=""};
+$("vOpen").onclick=()=>{if(vUrl&&window.Native)window.Native.openUrl(vUrl)};
 async function checkItem(t,slug){
+  const broP=kimbino(t.qs[0]).catch(()=>[]);
   const raw=[];const seenIds=new Set();
   for(const q of t.qs){(await searchAll(q,slug)).forEach(x=>{if(!seenIds.has(x.idoffer_special)){seenIds.add(x.idoffer_special);raw.push(x)}})}
   const esc=w=>w.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
@@ -418,7 +447,7 @@ async function checkItem(t,slug){
   const sized=Object.values(byStore);
   const offers=(t.size&&sized.length?sized:Object.values(byStoreAny)).sort((a,b)=>a.price-b.price);
   if(t.size&&!sized.length&&offers.length)offers.forEach(o=>o.sizeNote="Size "+t.size.n+t.size.u+" not confirmed");
-  return {...t,offers,found:raw.length};
+  return {...t,offers,found:raw.length,brochures:await broP};
 }
 
 // ---------- Run ----------
@@ -547,7 +576,11 @@ function render(){
       if(b.sizeNote)r.appendChild(el("div","where","⚠ "+b.sizeNote+", check the pack"));
       li.appendChild(r);
       li.appendChild(openLink(b.url));
-    }else li.appendChild(el("div","none",it.error?"Couldn't check this item. Try again.":"No offer found this week."));
+    }
+    if(it.brochures&&it.brochures.length){li.appendChild(el("div","where","📄 Also in these brochures (tap to see the price):"));const row=el("div","bro");
+      it.brochures.forEach(x=>{const b=el("button");const im=el("img");im.src=x.thumb;im.alt=x.shop+" page "+x.page;im.loading="lazy";b.appendChild(im);
+        b.appendChild(el("span",null,x.shop+(x.page?" p."+x.page:"")));b.onclick=()=>openViewer(x);row.appendChild(b)});li.appendChild(row)}
+    if(!b)li.appendChild(el("div","none",it.error?"Couldn't check this item. Try again.":(it.brochures&&it.brochures.length?"No price listed on D4D. Check the brochure pages above.":"No offer found this week.")));
     ul.appendChild(li);
   });
   // shop ranking
